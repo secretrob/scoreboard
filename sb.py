@@ -16,14 +16,17 @@ def get_frames(path):
         return frames
 
 
-def display_gif(path,number_of_loops,center):
+def display_gif(path,number_of_loops,center,speed=50):
     loops_done=0
     while True:
         for frame in get_frames(path):
             if center:
                 offset=centerWidth-(frame.width/2)
             matrix.SetImage(frame,offset)
-            duration=100 if frame.info['duration']<100 else frame.info['duration']
+            if speed=='gif':
+                duration=frame.info['duration']
+            else:
+                duration=speed
             time.sleep(duration/1000)
         loops_done+=1
         if loops_done>=number_of_loops:
@@ -180,6 +183,12 @@ def isActiveScreenTime(startTime, endTime):
     else:
         return current_time >= start_time or current_time <= end_time
 
+def timeUntilScreenActive(startTime):
+    now = datetime.now()
+    current_time = datetime.strptime(now.strftime("%I:%M%p"), "%I:%M%p")
+    start_time = datetime.strptime(startTime, "%I:%M%p")
+    return start_time - current_time    
+
 def checkGoalScorer(game, gameOld):
     """Checks if a team has scored.
 
@@ -212,43 +221,21 @@ def buildGameNotStarted(game):
 
     # Add the logos of the teams inivolved to the image.
     displayLogos(game['Away Abbreviation'],game['Home Abbreviation'])
-
-    # Add "Today" to the image.
-    draw.text((firstMiddleCol+1,0), "T", font=fontMedReg, fill=fillWhite)
-    draw.text((firstMiddleCol+5,2), "o", font=fontSmallReg, fill=fillWhite)
-    draw.text((firstMiddleCol+9,2), "d", font=fontSmallReg, fill=fillWhite)
-    draw.text((firstMiddleCol+13,2), "a", font=fontSmallReg, fill=fillWhite)
-    draw.text((firstMiddleCol+17,2), "y", font=fontSmallReg, fill=fillWhite)
-
-    # Add "@" to the image.
-    draw.text((firstMiddleCol+6,8), "@", font=fontLargeReg, fill=fillWhite)
-
+    
     # Extract the start time in 12 hour format.
     startTime = game['Start Time Local']
-    startTime = startTime.time().strftime('%I:%M')
+    startTime = startTime.time().strftime('%I:%M %p')
     startTime = str(startTime) # Cast to a string for easier parsing.
 
     # Add the start time to the image. Adjust placement for times before/after 10pm local time.
     if startTime[0] == "1": # 10pm or later.
-        # Hour.
-        draw.text((firstMiddleCol,22), startTime[0], font=fontSmallReg, fill=fillWhite)
-        draw.text((firstMiddleCol+5,22), startTime[1], font=fontSmallReg, fill=fillWhite)
-        # Colon (manual dots since the font's colon looks funny).
-        draw.rectangle(((firstMiddleCol+10,25),(firstMiddleCol+10,25)), fill=fillWhite)
-        draw.rectangle(((firstMiddleCol+10,27),(firstMiddleCol+10,27)), fill=fillWhite)
-        # Minutes.
-        draw.text((firstMiddleCol+12,22), startTime[3], font=fontSmallReg, fill=fillWhite) # Skipping startTime[2] as that would be the colon.
-        draw.text((firstMiddleCol+17,22), startTime[4], font=fontSmallReg, fill=fillWhite)
+        draw.text((firstMiddleCol-2,4), startTime, font=fontDefault, fill=fillWhite) #23 wide
 
     else: # 9pm or earlier.
-        # Hour.
-        draw.text((firstMiddleCol+3,22), startTime[1], font=fontSmallReg, fill=fillWhite)
-        # Colon (manual dots since the font's colon looks funny).
-        draw.rectangle(((firstMiddleCol+8,25),(firstMiddleCol+8,25)), fill=fillWhite)
-        draw.rectangle(((firstMiddleCol+8,27),(firstMiddleCol+8,27)), fill=fillWhite)
-        # Minutes.
-        draw.text((firstMiddleCol+10,22), startTime[3], font=fontSmallReg, fill=fillWhite)
-        draw.text((firstMiddleCol+15,22), startTime[4], font=fontSmallReg, fill=fillWhite)
+        draw.text((firstMiddleCol,4), startTime[1:], font=fontDefault, fill=fillWhite) #20 wide
+
+    # Add "@" to the image.
+    draw.text((firstMiddleCol+8,19), "@", font=fontLarge, fill=fillWhite)
 
 def buildGameInProgress(game, gameOld, scoringTeam):
     """Adds all aspects of the game in progress screen to the image object.
@@ -282,19 +269,15 @@ def buildGameOver(game, scoringTeam):
     # Check if the game ended in overtime or a shootout.
     # If so, add that to the image.
     if 'OT' in game['Period Name'] or "SO" in game['Period Name']:        
-        draw.text((firstMiddleCol-(len(game['Period Name']))+1,0), game['Period Name'], font=fontSmallReg, fill=fillWhite)
+        draw.text((firstMiddleCol-(len(game['Period Name']))+1,0), game['Period Name'], font=fontDefault, fill=fillWhite)
     elif game['Period Number'] > 5: # If the game ended in 2OT or later.
-        draw.text((firstMiddleCol+1,0), game["Period Name"], font=fontSmallReg, fill=fillWhite)
+        draw.text((firstMiddleCol+1,0), game["Period Name"], font=fontDefault, fill=fillWhite)
     else: 
         #if game['Recap']:
-        #    draw.text((1,0), game['Recap'], font=fontSmallReg, fill=fillWhite)
+        #    draw.text((1,0), game['Recap'], font=fontDefault, fill=fillWhite)
         #else:
             # Add "Final" to the image.
-        draw.text((firstMiddleCol+1,0), "F", font=fontMedReg, fill=fillWhite)
-        draw.text((firstMiddleCol+5,2), "i", font=fontSmallReg, fill=fillWhite)
-        draw.text((firstMiddleCol+9,2), "n", font=fontSmallReg, fill=fillWhite)
-        draw.text((firstMiddleCol+14,2), "a", font=fontSmallReg, fill=fillWhite)
-        draw.text((firstMiddleCol+17,2), "l", font=fontSmallReg, fill=fillWhite)
+        draw.text((firstMiddleCol-4,0), "Final", font=fontDefault, fill=fillWhite)
 
     # Add the current score to the image.
     displayScore(game['Away Score'],game['Home Score'], scoringTeam)
@@ -310,7 +293,7 @@ def buildGamePostponed(game):
     displayLogos(game['Away Abbreviation'],game['Home Abbreviation'])
 
     # Add "PPD" to the image.
-    draw.text((firstMiddleCol+2,0), "PPD", font=fontMedReg, fill=fillWhite)
+    draw.text((firstMiddleCol+2,0), "PPD", font=fontDefault, fill=fillWhite)
 
 def buildNoGamesToday():
     """Adds all aspects of the no games today screen to the image object."""
@@ -322,9 +305,9 @@ def buildNoGamesToday():
     image.paste(nhlLogo, (1, 1))
 
     # Add "No Games Today" to the image.
-    draw.text((32,0), "No", font=fontMedReg, fill=fillWhite)
-    draw.text((32,10), "Games", font=fontMedReg, fill=fillWhite)
-    draw.text((32,20), "Today", font=fontMedReg, fill=fillWhite)
+    draw.text((32,0), "No", font=fontDefault, fill=fillWhite)
+    draw.text((32,10), "Games", font=fontDefault, fill=fillWhite)
+    draw.text((32,20), "Today", font=fontDefault, fill=fillWhite)
 
 def buildLoading():
     """Adds all aspects of the loading screen to the image object."""
@@ -336,8 +319,7 @@ def buildLoading():
     image.paste(nhlLogo, (1, 1))
 
     # Add "Now Loading" to the image.
-    draw.text((29,8), "Now", font=fontSmallReg, fill=fillWhite)
-    draw.text((29,15), "Loading", font=fontSmallReg, fill=fillWhite)
+    draw.text((29,7), "Loading", font=fontDefault, fill=fillWhite)
 
 def fadeImage(im, reverse=False, black=255, gradient_magnitude=1.):
     if im.mode != 'RGBA':
@@ -388,6 +370,7 @@ def displayLogos(awayTeam, homeTeam):
     # Logos will be bounded by the text region, and be centered vertically.
     image.paste(fadeImage(awayLogo,True,225), (middleAdj-awayLogoWidth, math.floor((32-awayLogoHeight)/2)))
     image.paste(fadeImage(homeLogo,False,225), (middleAdj+22, math.floor((32-homeLogoHeight)/2)))
+    draw.line([(63,0),(63,32)],fill=fillRed,width=2)
 
 def displayPeriod(periodNumber, periodName, timeRemaining):
     """Adds the current period to the image object.
@@ -400,29 +383,29 @@ def displayPeriod(periodNumber, periodName, timeRemaining):
 
     # If the first period, add "1st" to the image.
     if periodNumber == 1:
-        draw.text((firstMiddleCol+5,0), "1", font=fontMedReg, fill=fillWhite)
-        draw.text((firstMiddleCol+9,0), "s", font=fontSmallReg, fill=fillWhite)
-        draw.text((firstMiddleCol+13,0), "t", font=fontSmallReg, fill=fillWhite)
+        draw.text((firstMiddleCol+5,0), "1", font=fontDefault, fill=fillWhite)
+        draw.text((firstMiddleCol+9,0), "s", font=fontDefault, fill=fillWhite)
+        draw.text((firstMiddleCol+13,0), "t", font=fontDefault, fill=fillWhite)
 
     # If the second period, add "2nd" to the image.
     elif periodNumber == 2:
-        draw.text((firstMiddleCol+4,0), "2", font=fontMedReg, fill=fillWhite)
-        draw.text((firstMiddleCol+10,0), "n", font=fontSmallReg, fill=fillWhite)
-        draw.text((firstMiddleCol+14,0), "d", font=fontSmallReg, fill=fillWhite)
+        draw.text((firstMiddleCol+4,0), "2", font=fontDefault, fill=fillWhite)
+        draw.text((firstMiddleCol+10,0), "n", font=fontDefault, fill=fillWhite)
+        draw.text((firstMiddleCol+14,0), "d", font=fontDefault, fill=fillWhite)
 
     # If the third period, add "3rd" to the image.
     elif periodNumber == 3:
-        draw.text((firstMiddleCol+4,0), "3", font=fontMedReg, fill=fillWhite)
-        draw.text((firstMiddleCol+10,0), "r", font=fontSmallReg, fill=fillWhite)
-        draw.text((firstMiddleCol+14,0), "d", font=fontSmallReg, fill=fillWhite)
+        draw.text((firstMiddleCol+4,0), "3", font=fontDefault, fill=fillWhite)
+        draw.text((firstMiddleCol+10,0), "r", font=fontDefault, fill=fillWhite)
+        draw.text((firstMiddleCol+14,0), "d", font=fontDefault, fill=fillWhite)
 
     # If in overtime/shootout, add that to the image.
     elif periodNumber == 4:
-        draw.text((firstMiddleCol+5,0), periodName, font=fontMedReg, fill=fillWhite)
+        draw.text((firstMiddleCol+5,0), periodName, font=fontDefault, fill=fillWhite)
 
     # Otherwise, we're in 2OT or later. Add that to the image.
     else:
-        draw.text((firstMiddleCol+3,0), periodName, font=fontMedReg, fill=fillWhite)
+        draw.text((firstMiddleCol+3,0), periodName, font=fontDefault, fill=fillWhite)
 
     # If not in the SO, and the period not over, add the time remaining in the period to the image.
     if periodNumber != 5:
@@ -431,7 +414,7 @@ def displayPeriod(periodNumber, periodName, timeRemaining):
 
         # If not in the SO and the time remaining is "END", then we know that we're in intermission. Don't add time remaininig to the image.
         else:
-            draw.text((firstMiddleCol+2,8), "INT", font=fontMedReg, fill=fillWhite)
+            draw.text((firstMiddleCol+2,8), "INT", font=fontDefault, fill=fillWhite)
 
 def displayTimeRemaing(timeRemaining):
     if timeRemaining[1]==":":
@@ -445,37 +428,37 @@ def displayTimeRemaing(timeRemaining):
     # If time left is 20:00 (period about to start), add the time to the image with specific spacing.
     if timeRemaining[0] == "2": # If the first digit of the time is 2.
         # Minutes.
-        draw.text((firstMiddleCol+1,9), timeRemaining[0], font=fontSmallReg, fill=fillWhite)
-        draw.text((firstMiddleCol+5,9), timeRemaining[1], font=fontSmallReg, fill=fillWhite)
+        draw.text((firstMiddleCol+1,9), timeRemaining[0], font=fontDefault, fill=fillWhite)
+        draw.text((firstMiddleCol+5,9), timeRemaining[1], font=fontDefault, fill=fillWhite)
         # Colon.
         draw.rectangle(((firstMiddleCol+10,12),(firstMiddleCol+10,12)), fill=fillWhite)
         draw.rectangle(((firstMiddleCol+10,14),(firstMiddleCol+10,14)), fill=fillWhite)
         # Seconds.
-        draw.text((firstMiddleCol+12,9), timeRemaining[3], font=fontSmallReg, fill=fillWhite) # Skipping "2" as it's the colon.
-        draw.text((firstMiddleCol+16,9), timeRemaining[4], font=fontSmallReg, fill=fillWhite)
+        draw.text((firstMiddleCol+12,9), timeRemaining[3], font=fontDefault, fill=fillWhite) # Skipping "2" as it's the colon.
+        draw.text((firstMiddleCol+16,9), timeRemaining[4], font=fontDefault, fill=fillWhite)
     
     # If time left is between 10 and 20 minutes, add the time to the image with different spacing.
     elif timeRemaining[0] == "1": # If the first digit of the time is 1.
         # Minutes.
-        draw.text((firstMiddleCol,9), timeRemaining[0], font=fontSmallReg, fill=fillWhite)
-        draw.text((firstMiddleCol+5,9), timeRemaining[1], font=fontSmallReg, fill=fillWhite)
+        draw.text((firstMiddleCol,9), timeRemaining[0], font=fontDefault, fill=fillWhite)
+        draw.text((firstMiddleCol+5,9), timeRemaining[1], font=fontDefault, fill=fillWhite)
         # Colon.
         draw.rectangle(((firstMiddleCol+10,12),(firstMiddleCol+10,12)), fill=fillWhite)
         draw.rectangle(((firstMiddleCol+10,14),(firstMiddleCol+10,14)), fill=fillWhite)
         # Seconds.
-        draw.text((firstMiddleCol+12,9), timeRemaining[3], font=fontSmallReg, fill=fillWhite)
-        draw.text((firstMiddleCol+17,9), timeRemaining[4], font=fontSmallReg, fill=fillWhite)
+        draw.text((firstMiddleCol+12,9), timeRemaining[3], font=fontDefault, fill=fillWhite)
+        draw.text((firstMiddleCol+17,9), timeRemaining[4], font=fontDefault, fill=fillWhite)
 
     # Otherwise, time is less than 10 minutes. Add the time to the image with spacing for a single digit minute.
     else:
         # Minutes.
-        draw.text((firstMiddleCol+3,9), timeRemaining[1], font=fontSmallReg, fill=fillWhite)
+        draw.text((firstMiddleCol+3,9), timeRemaining[1], font=fontDefault, fill=fillWhite)
         # Colon.
         draw.rectangle(((firstMiddleCol+8,12),(firstMiddleCol+8,12)), fill=fillWhite)
         draw.rectangle(((firstMiddleCol+8,14),(firstMiddleCol+8,14)), fill=fillWhite)
         # Seconds.
-        draw.text((firstMiddleCol+10,9), timeRemaining[3], font=fontSmallReg, fill=fillWhite)
-        draw.text((firstMiddleCol+15,9), timeRemaining[4], font=fontSmallReg, fill=fillWhite)
+        draw.text((firstMiddleCol+10,9), timeRemaining[3], font=fontDefault, fill=fillWhite)
+        draw.text((firstMiddleCol+15,9), timeRemaining[4], font=fontDefault, fill=fillWhite)
 
 def displayScore(awayScore, homeScore, scoringTeam = "none"):
     """Add the score for both teams to the image object.
@@ -487,23 +470,23 @@ def displayScore(awayScore, homeScore, scoringTeam = "none"):
     """
 
     # Add the hypen to the image.
-    draw.text((firstMiddleCol+9,20), "-", font=fontSmallBold, fill=fillWhite)
+    draw.text((firstMiddleCol+8,17), "-", font=fontDefault, fill=fillWhite)
 
     # If no team scored, add both scores to the image.
     if scoringTeam == "none":
-        draw.text((firstMiddleCol+1,17), str(awayScore), font=fontLargeBold, fill=fillWhite)
-        draw.text((firstMiddleCol+13,17), str(homeScore), font=fontLargeBold, fill=(fillWhite))
+        draw.text((firstMiddleCol,17), str(awayScore), font=fontLarge, fill=fillWhite)
+        draw.text((firstMiddleCol+17,17), str(homeScore), font=fontLarge, fill=(fillWhite))
     
     # If either or both of the teams scored, add that number to the immage in red.
     elif scoringTeam == "away":
-        draw.text((firstMiddleCol+1,17), str(awayScore), font=fontLargeBold, fill=fillRed)
-        draw.text((firstMiddleCol+13,17), str(homeScore), font=fontLargeBold, fill=fillWhite)
+        draw.text((firstMiddleCol,17), str(awayScore), font=fontLarge, fill=fillRed)
+        draw.text((firstMiddleCol+17,17), str(homeScore), font=fontLarge, fill=fillWhite)
     elif scoringTeam == "home":
-        draw.text((firstMiddleCol+1,17), str(awayScore), font=fontLargeBold, fill=fillWhite)
-        draw.text((firstMiddleCol+13,17), str(homeScore), font=fontLargeBold, fill=fillRed)
+        draw.text((firstMiddleCol,17), str(awayScore), font=fontLarge, fill=fillWhite)
+        draw.text((firstMiddleCol+17,17), str(homeScore), font=fontLarge, fill=fillRed)
     elif scoringTeam == "both":
-        draw.text((firstMiddleCol+1,17), str(awayScore), font=fontLargeBold, fill=fillRed)
-        draw.text((firstMiddleCol+13,17), str(homeScore), font=fontLargeBold, fill=fillRed)
+        draw.text((firstMiddleCol,17), str(awayScore), font=fontLarge, fill=fillRed)
+        draw.text((firstMiddleCol+17,17), str(homeScore), font=fontLarge, fill=fillRed)
 
 def displayGoalFade(score, location, secondScore = "", secondLocation = (0,0), both=False):
     """Adds a red number to the image and fades it to white.
@@ -524,8 +507,8 @@ def displayGoalFade(score, location, secondScore = "", secondLocation = (0,0), b
     if both == True:  
         # Fade both numbers to white.
         for n in range(50, 256):
-            draw.text(location, score, font=fontLargeBold, fill=(255, n, n, 255))
-            draw.text(secondLocation, secondScore, font=fontLargeBold, fill=(255, n, n, 255))
+            draw.text(location, score, font=fontLarge, fill=(255, n, n, 255))
+            draw.text(secondLocation, secondScore, font=fontLarge, fill=(255, n, n, 255))
             matrix.SetImage(image)
             time.sleep(.015)
     
@@ -533,7 +516,7 @@ def displayGoalFade(score, location, secondScore = "", secondLocation = (0,0), b
     else:
         # Fade number to white.
         for n in range(50, 256):
-            draw.text(location, score, font=fontLargeBold, fill=(255, n, n, 255))
+            draw.text(location, score, font=fontLarge, fill=(255, n, n, 255))
             matrix.SetImage(image)
             time.sleep(.015)
 
@@ -629,11 +612,11 @@ def runScoreboard():
                     
                     # If a team has scored, fade the red number to white.
                     if scoringTeam == "away":
-                        displayGoalFade(str(game['Away Score']), (firstMiddleCol+1,17))
+                        displayGoalFade(str(game['Away Score']), (firstMiddleCol,17))
                     elif scoringTeam == "home":
-                        displayGoalFade(str(game['Home Score']), (firstMiddleCol+13,17))
+                        displayGoalFade(str(game['Home Score']), (firstMiddleCol+17,17))
                     elif scoringTeam == "both":
-                        displayGoalFade(str(game['Away Score']), (firstMiddleCol+1,17), str(game['Home Score']), (firstMiddleCol+13,17), True) # True indicates that both teams have scored.
+                        displayGoalFade(str(game['Away Score']), (firstMiddleCol,17), str(game['Home Score']), (firstMiddleCol+17,17), True) # True indicates that both teams have scored.
 
                     # Hold the screen before fading.
                     time.sleep(cycleTime)
@@ -670,7 +653,11 @@ def runScoreboard():
             # "Wipe" the image by writing over the entirity with a black rectangle.
             draw.rectangle(((0,0),(endPixel,31)), fill=fillBlack)
             matrix.SetImage(image)
-            time.sleep(60) #sleep 1 min and check again
+            waitTime = timeUntilScreenActive(timeStart)
+            dispTime = str(waitTime).split(':')
+            if waitTime.seconds>300:
+                print("Sleeping due to screen off times. Will wake and try API again in " + dispTime[0] + " hours and " + dispTime[1] + " mins.")
+            time.sleep(waitTime.seconds-60) #sleep until one min prior to start time and check again
 
 if __name__ == "__main__":
 
@@ -696,12 +683,16 @@ if __name__ == "__main__":
     draw = ImageDraw.Draw(image)
 
     # Declare fonts that are used throughout.
-    fontSmallReg = ImageFont.load("assets/fonts/PIL/Tamzen5x9r.pil")
-    fontSmallBold = ImageFont.load("assets/fonts/PIL/Tamzen5x9b.pil")
-    fontMedReg = ImageFont.load("assets/fonts/PIL/Tamzen6x12r.pil")
-    fontMedBold = ImageFont.load("assets/fonts/PIL/Tamzen6x12b.pil")
-    fontLargeReg = ImageFont.load("assets/fonts/PIL/Tamzen8x15r.pil")
-    fontLargeBold = ImageFont.load("assets/fonts/PIL/Tamzen8x15b.pil")
+    #fontSmallReg = ImageFont.load("assets/fonts/PIL/Tamzen5x9r.pil")
+    #fontSmallBold = ImageFont.load("assets/fonts/PIL/Tamzen5x9b.pil")
+    #fontMedReg = ImageFont.load("assets/fonts/PIL/Tamzen6x12r.pil")
+    #fontMedBold = ImageFont.load("assets/fonts/PIL/Tamzen6x12b.pil")
+    #fontLargeReg = ImageFont.load("assets/fonts/PIL/Tamzen8x15r.pil")
+    #fontLargeBold = ImageFont.load("assets/fonts/PIL/Tamzen8x15b.pil")
+
+    fontMedium = ImageFont.truetype("assets/fonts/04B_24__.TTF",8)
+    fontLarge = ImageFont.truetype("assets/fonts/score_large.otf",16)
+    fontDefault = fontMedium
 
     # Declare text colours that are needed.
     fillWhite = 255,255,255,255
@@ -718,7 +709,7 @@ if __name__ == "__main__":
     cycleTime = 10
 
     timeStart = '11:00AM'
-    timeEnd = '12:30AM'
+    timeEnd = '1:30AM'
 
     disableFade=True
 
