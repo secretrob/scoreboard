@@ -6,23 +6,21 @@ import json
 import time
 import math
 
-def get_frames(path):
+def get_frames(path,size):
     """Returns an iterable of gif frames."""
     frames = []
     with Image.open(path) as gif:
         for frame in ImageSequence.Iterator(gif):
-            frame = frame.convert('RGB').resize((32, 32))
+            frame = frame.convert('RGB').resize(size)
             frames.append(frame)
         return frames
 
 
-def display_gif(path,number_of_loops,center,speed=50):
-    loops_done=0
+def display_gif(path,number_of_loops,location,size=(32,32),speed=50):
+    loops_done=0    
     while True:
-        for frame in get_frames(path):
-            if center:
-                offset=centerWidth-(frame.width/2)
-            matrix.SetImage(frame,offset)
+        for frame in get_frames(path,size):
+            matrix.SetImage(frame, location[0])
             if speed=='gif':
                 duration=frame.info['duration']
             else:
@@ -40,9 +38,17 @@ def getTeamData():
     """
     
     # Call the NHL Teams API. Store as a JSON object.
-    teamsResponse = requests.get(url="https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/teams")
-    teamsJson = teamsResponse.json()
-
+    # check for cache file and use that first
+    # TODO: Add check on timestamp and delete if cache X days old
+    with open("cache/teams.json", 'w+', encoding='utf-8') as teamsJsonFile:
+        if teamsJsonFile.read(1):
+            teamsJsonFile.seek(0)
+            teamsJson = json.load(t)
+        else:
+            teamsResponse = requests.get(url="https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/teams")
+            teamsJson = teamsResponse.json()
+            json.dump(teamsJson, teamsJsonFile, ensure_ascii=False, indent=4)
+    teamsJsonFile.close()
     # Decalare an empty list to hold the team dicts.
     teams = []
 
@@ -79,10 +85,13 @@ def getGameData(teams):
 
             # Prep the period data for consistancy. This data doesn't exist in the API responce until game begins.
             if event['status']['period']>0:
-                perName = ""
-                perTimeRem = event['status']['displayClock']
-                if "OT" in event['status']['type']['shortDetail']:
-                    perName=event['status']['type']['shortDetail'].rsplit(' ',1)[0]
+                perInfo = event['status']['type']['shortDetail'].split(' - ')
+                if len(perInfo)>1:
+                    perName = perInfo[1]
+                    perTimeRem = perInfo[0]
+                else:
+                    perName = perInfo[0]
+                    perTimeRem = "0:00"
             else:
                 perName = "Not Started"
                 perTimeRem = "Not Started"
@@ -99,7 +108,7 @@ def getGameData(teams):
                 'Away Score': event['competitions'][0]['competitors'][1]['score'],                
                 'Start Time UTC':  datetime.strptime(event['competitions'][0]['date'], '%Y-%m-%dT%H:%MZ'), # Extracts the startime from what's given by the API.
                 'Start Time Local': utcToLocal(datetime.strptime(event['competitions'][0]['date'], '%Y-%m-%dT%H:%MZ')), # Converts the UTC start time to the RPi's local timezone.
-                'Status': 'Preview' if event['status']['type']['description']=='Scheduled' else event['status']['type']['description'],
+                'Status': event['status']['type']['name'],
                 'Detailed Status': event['status']['type']['description'],
                 'Period Number': event['status']['period'],
                 'Recap': '',
@@ -186,8 +195,8 @@ def isActiveScreenTime(startTime, endTime):
 def timeUntilScreenActive(startTime):
     now = datetime.now()
     current_time = datetime.strptime(now.strftime("%I:%M%p"), "%I:%M%p")
-    start_time = datetime.strptime(startTime, "%I:%M%p")
-    return start_time - current_time    
+    start_time = datetime.strptime(startTime, "%I:%M%p")    
+    return start_time - current_time
 
 def checkGoalScorer(game, gameOld):
     """Checks if a team has scored.
@@ -212,35 +221,8 @@ def checkGoalScorer(game, gameOld):
 
     return scoringTeam
 
-def buildGameNotStarted(game):
-    """Adds all aspects of the game not started screen to the image object.
-
-    Args:
-        game (dict): All information for a specific game.
-    """
-
-    # Add the logos of the teams inivolved to the image.
-    displayLogos(game['Away Abbreviation'],game['Home Abbreviation'])
-    
-    # Extract the start time in 12 hour format.
-    startTime = game['Start Time Local']
-    startTime = startTime.time().strftime('%I:%M %p')
-    startTime = str(startTime) # Cast to a string for easier parsing.
-
-    # Add the start time to the image. Adjust placement for times before/after 10pm local time.
-    if startTime[0] == "1": # 10pm or later.
-        draw.text((firstMiddleCol-2,4), startTime, font=fontDefault, fill=fillWhite) #23 wide
-
-    else: # 9pm or earlier.
-        draw.text((firstMiddleCol,4), startTime[1:], font=fontDefault, fill=fillWhite) #20 wide
-
-    # Add "@" to the image.
-    draw.text((firstMiddleCol+8,19), "@", font=fontLarge, fill=fillWhite)
-
-def buildGameInProgress(game, gameOld, scoringTeam):
-    """Adds all aspects of the game in progress screen to the image object.
-
-    Args:
+def buildGame(game, gameOld, scoringTeam):
+    """Args:
         game (dict): All information for a specific game.
         gameOld (dict): The same information, but from one cycle ago.
         scoringTeam (string): If the home team, away team, or both, or neither scored.
@@ -249,51 +231,14 @@ def buildGameInProgress(game, gameOld, scoringTeam):
     # Add the logos of the teams inivolved to the image.
     displayLogos(game['Away Abbreviation'],game['Home Abbreviation'])
 
+    startTime = game['Start Time Local']
+    startTime = startTime.time().strftime('%I:%M %p')
+    startTime = str(startTime) # Cast to a string for easier parsing.    
+    
     # Add the period to the image.
-    displayPeriod(game['Period Number'], game['Period Name'], game['Period Time Remaining'])
-
+    displayPeriod(game['Period Number'], game['Period Name'], game['Period Time Remaining'], game['Status'], startTime)
     # Add the current score to the image. Note if either team scored.
-    displayScore(game['Away Score'], game['Home Score'], scoringTeam)
-
-def buildGameOver(game, scoringTeam):
-    """Adds all aspects of the game over screen to the image object.
-
-    Args:
-        game (dict): All information for a specific game.
-        scoringTeam (string): If the home team, away team, or both, or neither scored.
-    """
-    
-    # Add the logos of the teams involved to the image.
-    displayLogos(game['Away Abbreviation'],game['Home Abbreviation'])
-
-    # Check if the game ended in overtime or a shootout.
-    # If so, add that to the image.
-    if 'OT' in game['Period Name'] or "SO" in game['Period Name']:        
-        draw.text((firstMiddleCol-(len(game['Period Name']))+1,0), game['Period Name'], font=fontDefault, fill=fillWhite)
-    elif game['Period Number'] > 5: # If the game ended in 2OT or later.
-        draw.text((firstMiddleCol+1,0), game["Period Name"], font=fontDefault, fill=fillWhite)
-    else: 
-        #if game['Recap']:
-        #    draw.text((1,0), game['Recap'], font=fontDefault, fill=fillWhite)
-        #else:
-            # Add "Final" to the image.
-        draw.text((firstMiddleCol-4,0), "Final", font=fontDefault, fill=fillWhite)
-
-    # Add the current score to the image.
-    displayScore(game['Away Score'],game['Home Score'], scoringTeam)
-
-def buildGamePostponed(game):
-    """Adds all aspects of the postponed screen to the image object.
-
-    Args:
-        game (dict): All information for a specific game.
-    """
-    
-    # Add the logos of the teams involved to the image.
-    displayLogos(game['Away Abbreviation'],game['Home Abbreviation'])
-
-    # Add "PPD" to the image.
-    draw.text((firstMiddleCol+2,0), "PPD", font=fontDefault, fill=fillWhite)
+    return displayScore(game['Away Score'], game['Home Score'], scoringTeam)
 
 def buildNoGamesToday():
     """Adds all aspects of the no games today screen to the image object."""
@@ -368,11 +313,13 @@ def displayLogos(awayTeam, homeTeam):
 
     # Add the logos to the image.
     # Logos will be bounded by the text region, and be centered vertically.
-    image.paste(fadeImage(awayLogo,True,225), (middleAdj-awayLogoWidth, math.floor((32-awayLogoHeight)/2)))
-    image.paste(fadeImage(homeLogo,False,225), (middleAdj+22, math.floor((32-homeLogoHeight)/2)))
-    draw.line([(63,0),(63,32)],fill=fillRed,width=2)
+    image.paste(fadeImage(awayLogo,True,225), (middleAdj-awayLogoWidth, math.floor((options.rows-awayLogoHeight)/2)))
+    image.paste(fadeImage(homeLogo,False,225), (middleAdj+22, math.floor((options.rows-homeLogoHeight)/2)))
+    
+    if debug:
+        draw.line([(63,0),(63,options.rows)],fill=fillRed,width=2)
 
-def displayPeriod(periodNumber, periodName, timeRemaining):
+def displayPeriod(periodNumber, periodName, timeRemaining, status, startTime):
     """Adds the current period to the image object.
 
     Args:
@@ -380,145 +327,66 @@ def displayPeriod(periodNumber, periodName, timeRemaining):
         periodName (string): [description]
         timeRemaining (string): [description]
     """
+    draw.text((firstMiddleCol+12,7), periodName, font=fontDefault, fill=fillWhite, anchor="ms")
+    if status=="STATUS_SCHEDULED":
+        timeRemaining=startTime
 
-    # If the first period, add "1st" to the image.
-    if periodNumber == 1:
-        draw.text((firstMiddleCol+5,0), "1", font=fontDefault, fill=fillWhite)
-        draw.text((firstMiddleCol+9,0), "s", font=fontDefault, fill=fillWhite)
-        draw.text((firstMiddleCol+13,0), "t", font=fontDefault, fill=fillWhite)
-
-    # If the second period, add "2nd" to the image.
-    elif periodNumber == 2:
-        draw.text((firstMiddleCol+4,0), "2", font=fontDefault, fill=fillWhite)
-        draw.text((firstMiddleCol+10,0), "n", font=fontDefault, fill=fillWhite)
-        draw.text((firstMiddleCol+14,0), "d", font=fontDefault, fill=fillWhite)
-
-    # If the third period, add "3rd" to the image.
-    elif periodNumber == 3:
-        draw.text((firstMiddleCol+4,0), "3", font=fontDefault, fill=fillWhite)
-        draw.text((firstMiddleCol+10,0), "r", font=fontDefault, fill=fillWhite)
-        draw.text((firstMiddleCol+14,0), "d", font=fontDefault, fill=fillWhite)
-
-    # If in overtime/shootout, add that to the image.
-    elif periodNumber == 4:
-        draw.text((firstMiddleCol+5,0), periodName, font=fontDefault, fill=fillWhite)
-
-    # Otherwise, we're in 2OT or later. Add that to the image.
-    else:
-        draw.text((firstMiddleCol+3,0), periodName, font=fontDefault, fill=fillWhite)
-
-    # If not in the SO, and the period not over, add the time remaining in the period to the image.
-    if periodNumber != 5:
-        if timeRemaining != "END":
-            displayTimeRemaing(timeRemaining) # Adds the time remaining in the period to the image.
-
-        # If not in the SO and the time remaining is "END", then we know that we're in intermission. Don't add time remaininig to the image.
-        else:
-            draw.text((firstMiddleCol+2,8), "INT", font=fontDefault, fill=fillWhite)
-
-def displayTimeRemaing(timeRemaining):
-    if timeRemaining[1]==":":
-        timeRemaining="0"+timeRemaining
-    """Adds the remaining time in the period to the image. Takes into account diffent widths of time remaining.
-
-    Args:
-        timeRemaining (string): The time remaining in the period in "MM:SS" format. For times less than 10 minutes, the minutes should have a leading zero (e.g 09:59).
-    """
-
-    # If time left is 20:00 (period about to start), add the time to the image with specific spacing.
-    if timeRemaining[0] == "2": # If the first digit of the time is 2.
-        # Minutes.
-        draw.text((firstMiddleCol+1,9), timeRemaining[0], font=fontDefault, fill=fillWhite)
-        draw.text((firstMiddleCol+5,9), timeRemaining[1], font=fontDefault, fill=fillWhite)
-        # Colon.
-        draw.rectangle(((firstMiddleCol+10,12),(firstMiddleCol+10,12)), fill=fillWhite)
-        draw.rectangle(((firstMiddleCol+10,14),(firstMiddleCol+10,14)), fill=fillWhite)
-        # Seconds.
-        draw.text((firstMiddleCol+12,9), timeRemaining[3], font=fontDefault, fill=fillWhite) # Skipping "2" as it's the colon.
-        draw.text((firstMiddleCol+16,9), timeRemaining[4], font=fontDefault, fill=fillWhite)
-    
-    # If time left is between 10 and 20 minutes, add the time to the image with different spacing.
-    elif timeRemaining[0] == "1": # If the first digit of the time is 1.
-        # Minutes.
-        draw.text((firstMiddleCol,9), timeRemaining[0], font=fontDefault, fill=fillWhite)
-        draw.text((firstMiddleCol+5,9), timeRemaining[1], font=fontDefault, fill=fillWhite)
-        # Colon.
-        draw.rectangle(((firstMiddleCol+10,12),(firstMiddleCol+10,12)), fill=fillWhite)
-        draw.rectangle(((firstMiddleCol+10,14),(firstMiddleCol+10,14)), fill=fillWhite)
-        # Seconds.
-        draw.text((firstMiddleCol+12,9), timeRemaining[3], font=fontDefault, fill=fillWhite)
-        draw.text((firstMiddleCol+17,9), timeRemaining[4], font=fontDefault, fill=fillWhite)
-
-    # Otherwise, time is less than 10 minutes. Add the time to the image with spacing for a single digit minute.
-    else:
-        # Minutes.
-        draw.text((firstMiddleCol+3,9), timeRemaining[1], font=fontDefault, fill=fillWhite)
-        # Colon.
-        draw.rectangle(((firstMiddleCol+8,12),(firstMiddleCol+8,12)), fill=fillWhite)
-        draw.rectangle(((firstMiddleCol+8,14),(firstMiddleCol+8,14)), fill=fillWhite)
-        # Seconds.
-        draw.text((firstMiddleCol+10,9), timeRemaining[3], font=fontDefault, fill=fillWhite)
-        draw.text((firstMiddleCol+15,9), timeRemaining[4], font=fontDefault, fill=fillWhite)
+    if status!="STATUS_FINAL":
+        draw.text((firstMiddleCol+12,13), timeRemaining, font=fontDefault, fill=fillWhite, anchor="ms")        
 
 def displayScore(awayScore, homeScore, scoringTeam = "none"):
     """Add the score for both teams to the image object.
-
     Args:
         awayScore (int): Score of the away team.
         homeScore (int): Score of the home team.
         scoringTeam (str, optional): The team that scored if applicable. Options: "away", "home", "both", "none". Defaults to "none".
     """
-
     # Add the hypen to the image.
-    draw.text((firstMiddleCol+8,17), "-", font=fontDefault, fill=fillWhite)
+    draw.text((firstMiddleCol+9,17), "-", font=fontLarge, fill=fillWhite)
 
+    goalData = {'score':'','location':'','secondScore':'','secondLocation':(0,0),'both':False}
     # If no team scored, add both scores to the image.
     if scoringTeam == "none":
-        draw.text((firstMiddleCol,17), str(awayScore), font=fontLarge, fill=fillWhite)
-        draw.text((firstMiddleCol+17,17), str(homeScore), font=fontLarge, fill=(fillWhite))
-    
-    # If either or both of the teams scored, add that number to the immage in red.
+        draw.text((firstMiddleCol+2,18), str(awayScore), font=fontLarge, fill=fillWhite)
+        draw.text((firstMiddleCol+15,18), str(homeScore), font=fontLarge, fill=(fillWhite))
+    # If either or both of the teams scored, add that number to the image in red.
     elif scoringTeam == "away":
-        draw.text((firstMiddleCol,17), str(awayScore), font=fontLarge, fill=fillRed)
-        draw.text((firstMiddleCol+17,17), str(homeScore), font=fontLarge, fill=fillWhite)
+        draw.text((firstMiddleCol-1,18), str(awayScore), font=fontLarge, fill=fillRed)
+        draw.text((firstMiddleCol+17,18), str(homeScore), font=fontLarge, fill=fillWhite)
+        goalData['score']=str(awayScore)
+        goalData['location']=(firstMiddleCol-1,18)
     elif scoringTeam == "home":
-        draw.text((firstMiddleCol,17), str(awayScore), font=fontLarge, fill=fillWhite)
-        draw.text((firstMiddleCol+17,17), str(homeScore), font=fontLarge, fill=fillRed)
+        draw.text((firstMiddleCol-1,18), str(awayScore), font=fontLarge, fill=fillWhite)
+        draw.text((firstMiddleCol+17,18), str(homeScore), font=fontLarge, fill=fillRed)
+        goalData['score']=str(homeScore)
+        goalData['location']=(firstMiddleCol+17,18)
     elif scoringTeam == "both":
-        draw.text((firstMiddleCol,17), str(awayScore), font=fontLarge, fill=fillRed)
-        draw.text((firstMiddleCol+17,17), str(homeScore), font=fontLarge, fill=fillRed)
+        draw.text((firstMiddleCol-1,18), str(awayScore), font=fontLarge, fill=fillRed)
+        draw.text((firstMiddleCol+17,18), str(homeScore), font=fontLarge, fill=fillRed)
+        goalData = {'score':str(awayScore), 'location':(firstMiddleCol-1,18), 'secondScore':str(homeScore), 'secondLocation':(firstMiddleCol+17,18), 'both':True}
 
-def displayGoalFade(score, location, secondScore = "", secondLocation = (0,0), both=False):
-    """Adds a red number to the image and fades it to white.
-       Note that this is the only time that the matrix is updated in a build or display function.
+    return goalData
 
-    Args:
-        score (int): The score that needs to be printed.
-        location (tuple): Where to add that score to the image.
-        secondScore (str, optional): If a second score also needs to be printed, that number. Defaults to "".
-        secondLocation (tuple, optional): Location for that second score. Defaults to (0,0).
-        both (bool, optional): If both teams have scored. Defaults to False.
-    """
-
-    # Print that a team score. This is only for testing.
-    display_gif("assets/images/goal_light_animation.gif",1,True)
-
+def displayGoal(goalData):
+    if goalData['score']=='':
+        return
+    # Show lamp and goal info
+    display_gif("assets/images/hockey-goal.gif",1,(0,0),(fullWidth,options.rows))
     # If both teams have scored.
-    if both == True:  
+    if goalData['both'] == True:        
         # Fade both numbers to white.
         for n in range(50, 256):
-            draw.text(location, score, font=fontLarge, fill=(255, n, n, 255))
-            draw.text(secondLocation, secondScore, font=fontLarge, fill=(255, n, n, 255))
+            draw.text(goalData['location'], goalData['score'], font=fontLarge, fill=(255, n, n, 255))
+            draw.text(goalData['secondLocation'], goalData['secondScore'], font=fontLarge, fill=(255, n, n, 255))
             matrix.SetImage(image)
-            time.sleep(.015)
-    
+            time.sleep(.0015)    
     # If one team has scored.
     else:
         # Fade number to white.
         for n in range(50, 256):
-            draw.text(location, score, font=fontLarge, fill=(255, n, n, 255))
+            draw.text(goalData['location'], goalData['score'], font=fontLarge, fill=(255, n, n, 255))
             matrix.SetImage(image)
-            time.sleep(.015)
+            time.sleep(.0015)
 
 def runScoreboard():
     """Runs the scoreboard geting scores and other game data and cycles through them in an infinite loop."""
@@ -538,7 +406,8 @@ def runScoreboard():
         try:
             teams = getTeamData()
             games = getGameData(teams)
-            gamesOld = games # Needed for checking logic on initial loop.
+            gamesOld = games # Needed for checking logic on initial loop.            
+            cycleTime = round(60/len(games))
             networkError = False
             break
 
@@ -568,11 +437,8 @@ def runScoreboard():
         # Update the maxBrightness and fadeSteps.
         maxBrightness, fadeStep = getMaxBrightness(int(datetime.now().strftime("%H")))
 
-        # Adjusting cycle time for single game situation.
-        if len(games) == 1:
-            cycleTime = 30
-        else:
-            cycleTime = 10
+        # Adjusting cycle time to only hit API once a min
+        cycleTime = round(60/len(games))
 
         if isActiveScreenTime(timeStart,timeEnd):
             # If there's games today.
@@ -584,21 +450,10 @@ def runScoreboard():
                     scoringTeam = checkGoalScorer(game, gameOld)
 
                     # If the game is postponed, build the postponed screen.
-                    if game['Detailed Status'] == "Postponed":
-                        buildGamePostponed(game)
+                    #if game['Detailed Status'] == "Postponed":
+                    #    buildGamePostponed(game)
 
-                    # If the game has yet to begin, build the game not started screen.
-                    elif game['Status'] == "Preview":
-                        buildGameNotStarted(game)
-
-                    # If the game is over, build the final score screen.
-                    elif game['Status'] == "Final":
-                        buildGameOver(game, scoringTeam)
-                    
-                    # Otherwise, the game is in progress. Build the game in progress screen.
-                    # If the home or away team has scored, take note of that.
-                    else:
-                        buildGameInProgress(game, gameOld, scoringTeam)
+                    goalData = buildGame(game, gameOld, scoringTeam)                    
 
                     # Set bottom right LED to red if there's a network error.
                     if networkError:
@@ -609,16 +464,13 @@ def runScoreboard():
                         matrix.brightness = brightness
                         matrix.SetImage(image)
                         time.sleep(.025)
-                    
-                    # If a team has scored, fade the red number to white.
-                    if scoringTeam == "away":
-                        displayGoalFade(str(game['Away Score']), (firstMiddleCol,17))
-                    elif scoringTeam == "home":
-                        displayGoalFade(str(game['Home Score']), (firstMiddleCol+17,17))
-                    elif scoringTeam == "both":
-                        displayGoalFade(str(game['Away Score']), (firstMiddleCol,17), str(game['Home Score']), (firstMiddleCol+17,17), True) # True indicates that both teams have scored.
 
                     # Hold the screen before fading.
+                    if confCycleTime>cycleTime:
+                        cycleTime=confCycleTime
+
+                    displayGoal(goalData)
+
                     time.sleep(cycleTime)
 
                     # Fade down to black.
@@ -654,10 +506,11 @@ def runScoreboard():
             draw.rectangle(((0,0),(endPixel,31)), fill=fillBlack)
             matrix.SetImage(image)
             waitTime = timeUntilScreenActive(timeStart)
-            dispTime = str(waitTime).split(':')
+            dispTime = str(waitTime).replace('-1 day, ','').split(':')
             if waitTime.seconds>300:
                 print("Sleeping due to screen off times. Will wake and try API again in " + dispTime[0] + " hours and " + dispTime[1] + " mins.")
-            time.sleep(waitTime.seconds-60) #sleep until one min prior to start time and check again
+            if waitTime.seconds>60:
+                time.sleep(waitTime.seconds-60) #sleep until one min prior to start time and check again
 
 if __name__ == "__main__":
 
@@ -682,14 +535,6 @@ if __name__ == "__main__":
     # Define a draw object. This will be used to draw shapes and text to the image.
     draw = ImageDraw.Draw(image)
 
-    # Declare fonts that are used throughout.
-    #fontSmallReg = ImageFont.load("assets/fonts/PIL/Tamzen5x9r.pil")
-    #fontSmallBold = ImageFont.load("assets/fonts/PIL/Tamzen5x9b.pil")
-    #fontMedReg = ImageFont.load("assets/fonts/PIL/Tamzen6x12r.pil")
-    #fontMedBold = ImageFont.load("assets/fonts/PIL/Tamzen6x12b.pil")
-    #fontLargeReg = ImageFont.load("assets/fonts/PIL/Tamzen8x15r.pil")
-    #fontLargeBold = ImageFont.load("assets/fonts/PIL/Tamzen8x15b.pil")
-
     fontMedium = ImageFont.truetype("assets/fonts/04B_24__.TTF",8)
     fontLarge = ImageFont.truetype("assets/fonts/score_large.otf",16)
     fontDefault = fontMedium
@@ -701,17 +546,20 @@ if __name__ == "__main__":
 
     # Define the first col that can be used for center text.
     # i.e. the first col you can use without worry of logo overlap.
-    centerWidth = ((64*options.chain_length)/2)
+    fullWidth = 64*options.chain_length
+    centerWidth = fullWidth/2
     firstMiddleCol = centerWidth-11
-    endPixel = (64*options.chain_length)-1
+    endPixel = fullWidth-1
 
     # Define the number of seconds to sit on each game.
-    cycleTime = 10
+    confCycleTime = 10
 
     timeStart = '11:00AM'
-    timeEnd = '1:30AM'
+    timeEnd = '10:00AM'
 
     disableFade=True
+
+    debug=False
 
     # Run the scoreboard.
     runScoreboard()
