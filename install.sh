@@ -8,10 +8,14 @@ python3 -m pip install -r setup/requirements.txt
 #install rgbmatrix
 git submodule update --init --recursive
 git config submodule.matrix.ignore all
+
 echo Running RGBMatrix Install
+
 cd submodules/matrix/bindings/python/rgbmatrix/ || exit
+
 python3 -m pip install --no-cache-dir cython
-python3 -m cython -2 --cplus *.pyxcat 
+python3 -m cython -2 --cplus *.pyx
+
 cd ../../../ || exit
 
 make build-python PYTHON="$(command -v python3)"
