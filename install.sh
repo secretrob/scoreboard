@@ -21,7 +21,7 @@ cd ../../../ || exit
 make build-python PYTHON="$(command -v python3)"
 sudo make install-python PYTHON="$(command -v python3)"
 
-cd ../../../ || exit
+cd ../../ || exit
 
 git reset --hard
 git fetch origin --prune
