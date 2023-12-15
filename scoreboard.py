@@ -530,11 +530,11 @@ if __name__ == "__main__":
 
     # Configure options for the matrix
     options = RGBMatrixOptions()
-    options.rows = config.get('matrix', 'rows')
-    options.cols = config.get('matrix', 'cols')
-    options.chain_length = config.get('matrix', 'chain_length')
-    options.parallel = config.get('matrix', 'parallel')
-    options.gpio_slowdown= config.get('matrix', 'gpio_slowdown')
+    options.rows = config.getint('matrix', 'rows')
+    options.cols = config.getint('matrix', 'cols')
+    options.chain_length = config.getint('matrix', 'chain_length')
+    options.parallel = config.getint('matrix', 'parallel')
+    options.gpio_slowdown= config.getint('matrix', 'gpio_slowdown')
     options.hardware_mapping = config.get('matrix', 'hardware_mapping')
     options.drop_privileges = False
 
@@ -547,7 +547,7 @@ if __name__ == "__main__":
     # Define a draw object. This will be used to draw shapes and text to the image.
     draw = ImageDraw.Draw(image)
 
-    sbPath = '/usr/local/scoreboard/'
+    sbPath = config.get('scoreboard', 'path')
 
     fontMedium = ImageFont.truetype(sbPath + "assets/fonts/04B_24__.TTF",8)
     fontLarge = ImageFont.truetype(sbPath + "assets/fonts/score_large.otf",16)
@@ -566,12 +566,12 @@ if __name__ == "__main__":
     endPixel = fullWidth-1
 
     # Define the number of seconds to sit on each game.
-    confCycleTime = config.get('matrix', 'confCycleTime')
+    confCycleTime = config.getint('scoreboard', 'confCycleTime')
 
-    timeStart = config.get('matrix', 'timeStart')
-    timeEnd = config.get('matrix', 'timeEnd')
-    disableFade=config.get('matrix', 'disableFade')
-    debug=config.get('matrix', 'debug')
+    timeStart = config.get('scoreboard', 'timeStart')
+    timeEnd = config.get('scoreboard', 'timeEnd')
+    disableFade=config.getboolean('scoreboard', 'disableFade')
+    debug=config.getboolean('scoreboard', 'debug')
 
     logging.basicConfig(filename="/var/log/rgb_scoreboard.log",
                     filemode='a',
