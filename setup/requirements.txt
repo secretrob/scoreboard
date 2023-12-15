@@ -1,0 +1,8 @@
+certifi==2023.11.17
+charset-normalizer==3.3.2
+idna==3.6
+Pillow==8.1.2
+requests==2.31.0
+rgbmatrix==0.0.1
+RPi.GPIO==0.7.0
+urllib3==2.1.0
