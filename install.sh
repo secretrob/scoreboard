@@ -37,8 +37,12 @@ cp ./scoreboard.py /usr/local/bin/scoreboard.py
 chmod +x /etc/init.d/rgb_scoreboard.sh
 chmod +x /usr/local/bin/scoreboard.py
 mkdir /usr/local/scoreboard
+mkdir /usr/local/scoreboard/cache
+touch /usr/local/scoreboard/cache/teams.json
+chmod -R 777 /usr/local/scoreboard/cache
 cp -R assets /usr/local/scoreboard/
 cp -R submodules /usr/local/scoreboard/
 
 echo Starting Scoreboard...
 /etc/init.d/rgb_scoreboard.sh start
+exit
