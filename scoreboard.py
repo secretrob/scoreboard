@@ -493,7 +493,6 @@ def runScoreboard():
 
         # Adjusting cycle time to only hit API once a min
         cycleTime = round(60/len(games))
-        cycleTime = 5
         if isCurrentTimeBetween(timeStart,timeEnd):
             # If there's games today.
             if games:
