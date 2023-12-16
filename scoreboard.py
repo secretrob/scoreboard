@@ -630,6 +630,7 @@ if __name__ == "__main__":
     now=datetime.now()
     timeStart=datetime.strptime(config.get('scoreboard', 'timeStart'), "%H:%M%p").replace(month=now.month,day=now.day,year=now.year)
     timeEnd=datetime.strptime(config.get('scoreboard', 'timeEnd'), "%H:%M%p").replace(month=now.month,day=now.day,year=now.year)
+    if timeEnd<now: timeEnd=timeEnd+timedelta(days=1)
     disableFade=config.getboolean('scoreboard', 'disableFade')
     debug=config.getboolean('scoreboard', 'debug')
     showClockWhileSleeping=config.getboolean('scoreboard', 'showClockWhileSleeping')
@@ -637,6 +638,8 @@ if __name__ == "__main__":
     cacheData = cacheInfo()
     cacheData.lastCacheTime=datetime.now()
     cacheData.gameCacheDelay=0
+
+    
 
     logging.basicConfig(filename=config.get('scoreboard','log'),
                     filemode='a',
