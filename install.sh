@@ -1,6 +1,5 @@
 #!/bin/bash
 echo Installing scoreboard
-chmod +x update.sh
 
 #apt
 apt install python3-pip python3-pillow -y
@@ -34,9 +33,12 @@ echo If no errors than the RGB install is complete
 #install scoreboard
 cp ./setup/scoreboard.conf /etc/rgb_scoreboard.conf
 cp ./setup/rgb_scoreboard.sh /etc/init.d/rgb_scoreboard.sh
+cp ./setup/rgb_scoreboard_update.sh /usr/local/bin/rgb_scoreboard_update.sh
 cp ./scoreboard.py /usr/local/bin/scoreboard.py
 chmod +x /etc/init.d/rgb_scoreboard.sh
 chmod +x /usr/local/bin/scoreboard.py
+chmod +x /usr/local/bin/rgb_scoreboard_update.sh
+
 mkdir /usr/local/scoreboard
 mkdir /usr/local/scoreboard/cache
 touch /usr/local/scoreboard/cache/teams.json

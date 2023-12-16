@@ -84,7 +84,7 @@ def getGameData(teams,cacheData):
     if gamesend<=gamesstart:
         cacheData.lastCacheTime=datetime.now()
         cacheData.gameCacheDelay=0
-    #    openType='w+' #flush and pull api
+        openType='w+' #flush and pull api
     with open(sbPath + "cache/games.json", openType, encoding='utf-8') as gamesJsonFile:
         if gamesJsonFile.read(1):            
             gamesJsonFile.seek(0)
@@ -100,7 +100,7 @@ def getGameData(teams,cacheData):
     # For each game, build a dict recording it's information. Append this to the end of the teams list.
     if eventsJson['events']: # If games today.
         allGamesEnded = True
-        earliestGame = ""    
+        earliestGame = utcToLocal(datetime(2099,1,1,0,0,0,0,timezone.utc))
         for event in eventsJson['events']:
             # Prep the period data for consistancy. This data doesn't exist in the API responce until game begins.
             if event['status']['period']>0:
@@ -142,9 +142,9 @@ def getGameData(teams,cacheData):
             if gameDict['Status']=="STATUS_SCHEDULED":
                 allGamesEnded = False
                 earliestGame = gameDict['Start Time Local'] if gameDict['Start Time Local'] < earliestGame else earliestGame
-            if gameDict['Status']!="STATUS_FINAL":
+            elif gameDict['Status']!="STATUS_FINAL":
                 allGamesEnded = False
-                earliestGame = ""            
+                earliestGame = utcToLocal(datetime(2099,1,1,0,0,0,0,timezone.utc))
 
             # Append the dict to the games list.
             games.append(gameDict)
@@ -152,8 +152,8 @@ def getGameData(teams,cacheData):
             # Sort list by Game ID. Ensures order doesn't change as games end.
             games.sort(key=lambda x:x['Game ID'])
         
-        if earliestGame!="" and cacheData.gameCacheDelay<=0:
-            cacheData.gameCacheDelay=timeUntil(earliestGame).seconds
+        if earliestGame!=datetime(2099,1,1,0,0,0,0,timezone.utc) and cacheData.gameCacheDelay<=0:
+            cacheData.gameCacheDelay=timeUntil(earliestGame,True).seconds
         if allGamesEnded and cacheData.gameCacheDelay<=0:
             cacheData.gameCacheDelay=timeUntil(datetime.now() + timedelta(hours = 1)).seconds
     
@@ -220,8 +220,9 @@ def isCurrentTimeBetween(startTime, endTime):
     else:
         return now >= startTime or now <= endTime
 
-def timeUntil(startTime):
-    now = datetime.now()        
+def timeUntil(startTime,utc=False):
+    now = datetime.now()
+    if utc: now = utcToLocal(datetime.now(timezone.utc))
     return startTime - now
 
 def checkGoalScorer(game, gameOld):
@@ -581,6 +582,7 @@ def runScoreboard():
 if __name__ == "__main__":
     # Read in configs from INI
     config = configparser.ConfigParser()
+    #config.read('setup/scoreboard.conf')
     config.read('/etc/rgb_scoreboard.conf')
     
     # Configure options for the matrix
