@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from PIL import Image, ImageDraw, ImageFont, ImageSequence
-from RGBMatrixEmulator import RGBMatrix, RGBMatrixOptions
+from rgbmatrix import RGBMatrix, RGBMatrixOptions
 from datetime import datetime, timezone, timedelta
 import configparser
 import logging
