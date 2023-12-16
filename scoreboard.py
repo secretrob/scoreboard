@@ -80,11 +80,12 @@ def getGameData(teams,cacheData):
     # Call the NHL API for today's game info. Save the rsult as a JSON object.
     gamesstart=cacheData.lastCacheTime
     gamesend=cacheData.lastCacheTime + timedelta(seconds=cacheData.gameCacheDelay)
-    openType='r+'
+    #openType='r+'
+    openType='w+' #TODO: FIX CACHE AND DEL
     if gamesend<=gamesstart:
         cacheData.lastCacheTime=datetime.now()
         cacheData.gameCacheDelay=0
-        #openType='w+' #flush and pull api
+        openType='w+' #flush and pull api
     with open(sbPath + "cache/games.json", openType, encoding='utf-8') as gamesJsonFile:
         if gamesJsonFile.read(1):            
             gamesJsonFile.seek(0)
