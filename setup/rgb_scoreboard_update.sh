@@ -1,7 +1,8 @@
 #!/bin/bash
 
 dir=${1?param missing - downloaded scoreboard dir. Default is ~/scoreboard }
-cd dir
+TRIMMED=$(echo "$dir" | sed 's:/*$::')
+cd $TRIMMED
 chmod +x update.sh
 ./update.sh
 
