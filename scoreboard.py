@@ -100,7 +100,7 @@ def getGameData(teams,cacheData):
     # For each game, build a dict recording it's information. Append this to the end of the teams list.
     if eventsJson['events']: # If games today.
         allGamesEnded = True
-        earliestGame = utcToLocal(datetime(2050,1,1,0,0,0,0,timezone.utc))
+        earliestGame = utcToLocal(datetime(2037,1,1,0,0,0,0,timezone.utc))
         for event in eventsJson['events']:
             # Prep the period data for consistancy. This data doesn't exist in the API responce until game begins.
             if event['status']['period']>0:
@@ -144,7 +144,7 @@ def getGameData(teams,cacheData):
                 earliestGame = gameDict['Start Time Local'] if gameDict['Start Time Local'] < earliestGame else earliestGame
             elif gameDict['Status']!="STATUS_FINAL":
                 allGamesEnded = False
-                earliestGame = utcToLocal(datetime(2050,1,1,0,0,0,0,timezone.utc))
+                earliestGame = utcToLocal(datetime(2037,1,1,0,0,0,0,timezone.utc))
 
             # Append the dict to the games list.
             games.append(gameDict)
