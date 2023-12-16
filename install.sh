@@ -1,5 +1,6 @@
 #!/bin/bash
 echo Installing scoreboard
+chmod +x update.sh
 
 #apt
 apt install python3-pip python3-pillow -y

@@ -1,13 +1,19 @@
 #!/usr/bin/env python
 from PIL import Image, ImageDraw, ImageFont, ImageSequence
-from rgbmatrix import RGBMatrix, RGBMatrixOptions
-from datetime import datetime, timezone
+from RGBMatrixEmulator import RGBMatrix, RGBMatrixOptions
+from datetime import datetime, timezone, timedelta
 import configparser
 import logging
 import requests
 import json
 import time
 import math
+import random
+
+class cacheInfo:
+    def __init__(self):
+        self.lastCacheTime=''
+        self.gameCacheDelay=0
 
 def get_frames(path,size):
     """Returns an iterable of gif frames."""
@@ -42,7 +48,6 @@ def getTeamData():
     
     # Call the NHL Teams API. Store as a JSON object.
     # check for cache file and use that first
-    # TODO: Add check on timestamp and delete if cache X days old
     with open(sbPath + "cache/teams.json", 'r+', encoding='utf-8') as teamsJsonFile:
         if teamsJsonFile.read(1):            
             teamsJsonFile.seek(0)
@@ -65,27 +70,38 @@ def getTeamData():
         teams.append(teamDict)
     return teams
 
-def getGameData(teams):
+def getGameData(teams,cacheData):
     """Get game data for all of todays games from the NHL API, returns games as a list of dictionaries.
-
     Args:
         teams (list of dictionaries): Team names and abberivations. Needed as the game API doen't return team abbreviations.
-
     Returns:
         games (list of dictionaries): All game info needed to display on scoreboard. Teams, scores, start times, game clock, etc.
     """
-
     # Call the NHL API for today's game info. Save the rsult as a JSON object.
-    eventsResponse = requests.get(url="https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard")
-    eventsJson = eventsResponse.json()
-
+    gamesstart=cacheData.lastCacheTime
+    gamesend=cacheData.lastCacheTime + timedelta(seconds=cacheData.gameCacheDelay)
+    openType='r+'
+    if gamesend<=gamesstart:
+        cacheData.lastCacheTime=datetime.now()
+        cacheData.gameCacheDelay=0
+    #    openType='w+' #flush and pull api
+    with open(sbPath + "cache/games.json", openType, encoding='utf-8') as gamesJsonFile:
+        if gamesJsonFile.read(1):            
+            gamesJsonFile.seek(0)
+            eventsJson = json.load(gamesJsonFile)
+        else:            
+            eventsResponse = requests.get(url="https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard")
+            eventsJson = eventsResponse.json()
+            json.dump(eventsJson, gamesJsonFile, ensure_ascii=False, indent=4)
+    gamesJsonFile.close()    
     # Decalare an empty list to hold the games dicts.
     games = []
 
     # For each game, build a dict recording it's information. Append this to the end of the teams list.
     if eventsJson['events']: # If games today.
-        for event in eventsJson['events']:            
-
+        allGamesEnded = True
+        earliestGame = ""    
+        for event in eventsJson['events']:
             # Prep the period data for consistancy. This data doesn't exist in the API responce until game begins.
             if event['status']['period']>0:
                 perInfo = event['status']['type']['shortDetail'].split(' - ')
@@ -122,11 +138,25 @@ def getGameData(teams):
             if event['competitions'][0].get('headlines'):
                 gameDict['Recap']=event['competitions'][0]['headlines'][0]['shortLinkText']
 
+            # Check to see if we reset the cache
+            if gameDict['Status']=="STATUS_SCHEDULED":
+                allGamesEnded = False
+                earliestGame = gameDict['Start Time Local'] if gameDict['Start Time Local'] < earliestGame else earliestGame
+            if gameDict['Status']!="STATUS_FINAL":
+                allGamesEnded = False
+                earliestGame = ""            
+
             # Append the dict to the games list.
             games.append(gameDict)
 
-            # Sort list by Game ID. Ensures order doesn't cahnge as games end.
+            # Sort list by Game ID. Ensures order doesn't change as games end.
             games.sort(key=lambda x:x['Game ID'])
+        
+        if earliestGame!="" and cacheData.gameCacheDelay<=0:
+            cacheData.gameCacheDelay=timeUntil(earliestGame).seconds
+        if allGamesEnded and cacheData.gameCacheDelay<=0:
+            cacheData.gameCacheDelay=timeUntil(datetime.now() + timedelta(hours = 1)).seconds
+    
     return games
 
 def getMaxBrightness(time):
@@ -183,23 +213,16 @@ def utcToLocal(utc_dt):
     """Returns a time object converted to the local timezone set on the RPi."""
     return utc_dt.replace(tzinfo=timezone.utc).astimezone(tz=None)
 
-def isActiveScreenTime(startTime, endTime):
-    if startTime=="" or endTime=="": 
-        return true
-    now = datetime.now()
-    current_time = datetime.strptime(now.strftime("%I:%M%p"), "%I:%M%p")
-    start_time = datetime.strptime(startTime, "%I:%M%p")
-    end_time = datetime.strptime(endTime, "%I:%M%p")
-    if start_time < end_time:
-        return start_time <= current_time <= end_time
+def isCurrentTimeBetween(startTime, endTime):
+    now = datetime.now()    
+    if startTime < endTime:
+        return startTime <= now <= endTime
     else:
-        return current_time >= start_time or current_time <= end_time
+        return now >= startTime or now <= endTime
 
-def timeUntilScreenActive(startTime):
-    now = datetime.now()
-    current_time = datetime.strptime(now.strftime("%I:%M%p"), "%I:%M%p")
-    start_time = datetime.strptime(startTime, "%I:%M%p")    
-    return start_time - current_time
+def timeUntil(startTime):
+    now = datetime.now()        
+    return startTime - now
 
 def checkGoalScorer(game, gameOld):
     """Checks if a team has scored.
@@ -397,6 +420,27 @@ def displayGoal(goalData):
             matrix.SetImage(image)
             time.sleep(.0015)
 
+def runClock(duration):
+    #run for duration in seconds
+    clockstart=datetime.now()
+    clockend=clockstart + timedelta(seconds=duration)
+    moveTimer=0
+    x=firstMiddleCol+12
+    y=centerHeight
+    while True:
+        moveTimer+=0.1
+        if moveTimer>=10: #screensaver
+            x=random.randrange(9,fullWidth-8,1) #width of ~20
+            y=random.randrange(4,endHeight-2,1) #height of 5
+            moveTimer=0
+        current = time.strftime("%H:%M")
+        draw.rectangle(((0,0),(endPixel,endHeight)), fill=fillBlack) #blank screen
+        draw.text((x,y), current, font=fontDefault, fill=fillWhite, anchor="mm")
+        matrix.SetImage(image)
+        time.sleep(0.1)
+        if isCurrentTimeBetween(clockstart,clockend)==False:
+            return        
+
 def runScoreboard():
     """Runs the scoreboard geting scores and other game data and cycles through them in an infinite loop."""
 
@@ -414,7 +458,7 @@ def runScoreboard():
     for i in range(100):
         try:
             teams = getTeamData()
-            games = getGameData(teams)
+            games = getGameData(teams,cacheData)
             gamesOld = games # Needed for checking logic on initial loop.            
             cycleTime = round(60/len(games))
             networkError = False
@@ -422,10 +466,11 @@ def runScoreboard():
 
         # In the event that the NHL API cannot be reached, set the bottom right LED to red.
         # TODO: Make this more robust for specific fail cases.
-        except:
+        except Exception as e:
+            logger.error('Error %s', '', exc_info=e)
             networkError = True
             if i >= 10:
-                draw.rectangle(((endPixel,31),(endPixel,31)), fill=fillRed)
+                draw.rectangle(((endPixel,endHeight),(endPixel,endHeight)), fill=fillRed)
                 matrix.SetImage(image)
             time.sleep(1)
 
@@ -439,7 +484,7 @@ def runScoreboard():
         time.sleep(.025)
 
     # "Wipe" the image by writing over the entirity with a black rectangle.
-    draw.rectangle(((0,0),(endPixel,31)), fill=fillBlack)
+    draw.rectangle(((0,0),(endPixel,endHeight)), fill=fillBlack)
     matrix.SetImage(image)
 
     while True:        
@@ -448,8 +493,8 @@ def runScoreboard():
 
         # Adjusting cycle time to only hit API once a min
         cycleTime = round(60/len(games))
-
-        if isActiveScreenTime(timeStart,timeEnd):
+        cycleTime = 5
+        if isCurrentTimeBetween(timeStart,timeEnd):
             # If there's games today.
             if games:
                 # Loop through both the games and gamesOld arrays.
@@ -466,7 +511,7 @@ def runScoreboard():
 
                     # Set bottom right LED to red if there's a network error.
                     if networkError:
-                        draw.rectangle(((endPixel,31),(endPixel,31)), fill=fillRed)
+                        draw.rectangle(((endPixel,endHeight),(endPixel,endHeight)), fill=fillRed)
 
                     # Fade up to the image.
                     for brightness in range(0,maxBrightness,fadeStep):
@@ -489,7 +534,7 @@ def runScoreboard():
                         time.sleep(.025)
 
                     # Make the screen totally blank between fades.
-                    draw.rectangle(((0,0),(endPixel,31)), fill=fillBlack) 
+                    draw.rectangle(((0,0),(endPixel,endHeight)), fill=fillBlack) 
                     matrix.SetImage(image)
 
             # If there's no games, build the no games today sceen, then wait 10 minutes before checking again.
@@ -498,36 +543,47 @@ def runScoreboard():
                 matrix.brightness = maxBrightness
                 matrix.SetImage(image)
                 time.sleep(600)
-                draw.rectangle(((0,0),(endPixel,31)), fill=fillBlack)
+                draw.rectangle(((0,0),(endPixel,endHeight)), fill=fillBlack)
             
             # Refresh the game data.
             # Record the data of the last cycle in gamesOld to check for goals.
             try:
                 gamesOld = games
 
-                games = getGameData(teams)
+                games = getGameData(teams,cacheData)
                 networkError = False
             except:
                 logger.info("Network Error")
                 networkError = True
         else:
             # "Wipe" the image by writing over the entirity with a black rectangle.
-            draw.rectangle(((0,0),(endPixel,31)), fill=fillBlack)
+            draw.rectangle(((0,0),(endPixel,endHeight)), fill=fillBlack)
+            matrix.brightness=maxBrightness
             matrix.SetImage(image)
-            waitTime = timeUntilScreenActive(timeStart)
-            dispTime = str(waitTime).replace('-1 day, ','').split(':')
+            waitTime = timeUntil(timeStart)
+            dispTime = str(waitTime + timedelta(days=-1*waitTime.days)).split(':')
             if waitTime.seconds>300:
                 logger.info("Sleeping due to screen off times. Will wake and try API again in " + dispTime[0] + " hours and " + dispTime[1] + " mins.")
+                draw.rectangle(((0,0),(endPixel,endHeight)), fill=fillBlack) #blank screen        
+                draw.text((firstMiddleCol+12,centerHeight-5), "Sleep - Wake in", font=fontDefault, fill=fillWhite, anchor="mm")
+                draw.text((firstMiddleCol+12,centerHeight+5), dispTime[0] + " hrs & " + dispTime[1] + " mins", font=fontDefault, fill=fillWhite, anchor="mm")
+                matrix.SetImage(image)
+                time.sleep(5)
             if waitTime.seconds>60:
                 logger.info("Waking up in " + str(waitTime.seconds) + " seconds.")
-                time.sleep(waitTime.seconds-60) #sleep until one min prior to start time and check again
+                draw.rectangle(((0,0),(endPixel,endHeight)), fill=fillBlack) #blank screen
+                draw.text((firstMiddleCol+12,centerHeight), "Start in " + str(waitTime.seconds), font=fontDefault, fill=fillWhite, anchor="mm")
+                matrix.SetImage(image)                
+                if showClockWhileSleeping:
+                    runClock(waitTime.seconds-60)
+                else:
+                    time.sleep(waitTime.seconds-60) #sleep until one min prior to start time and check again
 
 if __name__ == "__main__":
-
     # Read in configs from INI
     config = configparser.ConfigParser()
-    config.read('/etc/rgb_scoreboard.conf')
-
+    config.read(['/etc/rgb_scoreboard.conf','setup/scoreboard.conf'])
+    
     # Configure options for the matrix
     options = RGBMatrixOptions()
     options.rows = config.getint('matrix', 'rows')
@@ -562,22 +618,30 @@ if __name__ == "__main__":
     # i.e. the first col you can use without worry of logo overlap.
     fullWidth = options.cols*options.chain_length
     centerWidth = fullWidth/2
+    centerHeight = options.rows-round(options.rows/2)    
     firstMiddleCol = centerWidth-11
     endPixel = fullWidth-1
+    endHeight = options.rows-1
 
     # Define the number of seconds to sit on each game.
     confCycleTime = config.getint('scoreboard', 'confCycleTime')
 
-    timeStart = config.get('scoreboard', 'timeStart')
-    timeEnd = config.get('scoreboard', 'timeEnd')
+    now=datetime.now()
+    timeStart=datetime.strptime(config.get('scoreboard', 'timeStart'), "%H:%M%p").replace(month=now.month,day=now.day,year=now.year)
+    timeEnd=datetime.strptime(config.get('scoreboard', 'timeEnd'), "%H:%M%p").replace(month=now.month,day=now.day,year=now.year)
     disableFade=config.getboolean('scoreboard', 'disableFade')
     debug=config.getboolean('scoreboard', 'debug')
+    showClockWhileSleeping=config.getboolean('scoreboard', 'showClockWhileSleeping')
 
-    logging.basicConfig(filename="/var/log/rgb_scoreboard.log",
+    cacheData = cacheInfo()
+    cacheData.lastCacheTime=datetime.now()
+    cacheData.gameCacheDelay=0
+
+    logging.basicConfig(filename=config.get('scoreboard','log'),
                     filemode='a',
                     format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
                     datefmt='%H:%M:%S',
-                    level=logging.INFO)
+                    level=logging.ERROR)
 
     logging.info("Running Scoreboard")
     logger = logging.getLogger('scoreboard')    
