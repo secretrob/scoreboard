@@ -78,10 +78,9 @@ def getGameData(teams,cacheData):
         games (list of dictionaries): All game info needed to display on scoreboard. Teams, scores, start times, game clock, etc.
     """
     # Call the NHL API for today's game info. Save the rsult as a JSON object.
-    gamesstart=cacheData.lastCacheTime
     gamesend=cacheData.lastCacheTime + timedelta(seconds=cacheData.gameCacheDelay)
     openType='r+'    
-    if gamesend<=gamesstart:
+    if gamesend<=datetime.now():
         cacheData.lastCacheTime=datetime.now()
         cacheData.gameCacheDelay=0
         openType='w+' #flush and pull api
@@ -152,7 +151,7 @@ def getGameData(teams,cacheData):
             # Sort list by Game ID. Ensures order doesn't change as games end.
             games.sort(key=lambda x:x['Game ID'])
         
-        if earliestGame!=datetime(2099,1,1,0,0,0,0,timezone.utc) and cacheData.gameCacheDelay<=0:
+        if earliestGame!=datetime(2037,1,1,0,0,0,0,timezone.utc) and cacheData.gameCacheDelay<=0:
             cacheData.gameCacheDelay=timeUntil(earliestGame,True).seconds
         elif allGamesEnded and cacheData.gameCacheDelay<=0:
             cacheData.gameCacheDelay=timeUntil(datetime.now() + timedelta(hours = 1)).seconds
@@ -647,7 +646,7 @@ if __name__ == "__main__":
                     filemode='a',
                     format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
                     datefmt='%H:%M:%S',
-                    level=logging.ERROR)
+                    level=logging.INFO)
 
     logging.info("Running Scoreboard")
     logger = logging.getLogger('scoreboard')    
