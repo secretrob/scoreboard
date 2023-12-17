@@ -80,8 +80,7 @@ def getGameData(teams,cacheData):
     # Call the NHL API for today's game info. Save the rsult as a JSON object.
     gamesstart=cacheData.lastCacheTime
     gamesend=cacheData.lastCacheTime + timedelta(seconds=cacheData.gameCacheDelay)
-    #openType='r+'
-    openType='w+' #TODO: FIX CACHE AND DEL
+    openType='r+'    
     if gamesend<=gamesstart:
         cacheData.lastCacheTime=datetime.now()
         cacheData.gameCacheDelay=0
@@ -155,8 +154,10 @@ def getGameData(teams,cacheData):
         
         if earliestGame!=datetime(2099,1,1,0,0,0,0,timezone.utc) and cacheData.gameCacheDelay<=0:
             cacheData.gameCacheDelay=timeUntil(earliestGame,True).seconds
-        if allGamesEnded and cacheData.gameCacheDelay<=0:
+        elif allGamesEnded and cacheData.gameCacheDelay<=0:
             cacheData.gameCacheDelay=timeUntil(datetime.now() + timedelta(hours = 1)).seconds
+        else:
+            cacheData.gameCacheDelay=5
     
     return games
 
