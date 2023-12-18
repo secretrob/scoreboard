@@ -649,6 +649,14 @@ if __name__ == "__main__":
     cacheData.lastCacheTime=datetime.now()
     cacheData.gameCacheDelay=0
 
+    
+
+    logging.basicConfig(filename=config.get('scoreboard','log'),
+                    filemode='a',
+                    format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
+                    datefmt='%H:%M:%S',
+                    level=logging.ERROR)
+
     logger = logging.getLogger('scoreboard')
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG)
