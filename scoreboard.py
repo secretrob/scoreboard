@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from PIL import Image, ImageDraw, ImageFont, ImageSequence
-from RGBMatrixEmulator import RGBMatrix, RGBMatrixOptions
+from rgbmatrix import RGBMatrix, RGBMatrixOptions
 from datetime import datetime, timezone, timedelta
 import configparser
 import logging
@@ -592,8 +592,8 @@ def runScoreboard():
 if __name__ == "__main__":
     # Read in configs from INI
     config = configparser.ConfigParser()
-    config.read('setup/scoreboard.conf')
-    #config.read('/etc/rgb_scoreboard.conf')
+    #config.read('setup/scoreboard.conf')
+    config.read('/etc/rgb_scoreboard.conf')
     
     # Configure options for the matrix
     options = RGBMatrixOptions()
