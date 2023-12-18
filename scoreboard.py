@@ -652,7 +652,7 @@ if __name__ == "__main__":
     
 
     logging.basicConfig(filename=config.get('scoreboard','log'),
-                    filemode='a',
+                    filemode='w+',
                     format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
                     datefmt='%H:%M:%S',
                     level=logging.ERROR)
