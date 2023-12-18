@@ -20,6 +20,10 @@ case "$1" in
     echo "Stopping scoreboard py"
     pkill -f /usr/local/bin/scoreboard.py
     ;;
+  restart)
+    echo "Retarting scoreboard py"
+    pkill -f /usr/local/bin/scoreboard.py && /usr/local/bin/scoreboard.py &
+    ;;
   *)
     echo "Usage: /etc/init.d/runScoreboard.sh {start|stop}"
     exit 1

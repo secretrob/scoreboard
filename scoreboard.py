@@ -15,6 +15,10 @@ class cacheInfo:
         self.lastCacheTime=''
         self.gameCacheDelay=0
 
+    def endTime(self):
+        return self.lastCacheTime + timedelta(seconds=self.gameCacheDelay)
+        
+
 def get_frames(path,size):
     """Returns an iterable of gif frames."""
     frames = []
@@ -78,9 +82,11 @@ def getGameData(teams,cacheData):
         games (list of dictionaries): All game info needed to display on scoreboard. Teams, scores, start times, game clock, etc.
     """
     # Call the NHL API for today's game info. Save the rsult as a JSON object.
-    gamesend=cacheData.lastCacheTime + timedelta(seconds=cacheData.gameCacheDelay)
-    openType='r+'    
+    gamesend=cacheData.endTime()
+    logger.debug("GAME JSON - DELAY: " + str(cacheData.gameCacheDelay) + " LASTCACHE: " + cacheData.lastCacheTime.strftime("%H:%M:%S") + " START: " + datetime.now().strftime("%H:%M:%S") + " END: " + gamesend.strftime("%H:%M:%S"))
+    openType='r+'
     if gamesend<=datetime.now():
+        logger.debug("FLUSH AND PULL API")
         cacheData.lastCacheTime=datetime.now()
         cacheData.gameCacheDelay=0
         openType='w+' #flush and pull api
@@ -88,10 +94,12 @@ def getGameData(teams,cacheData):
         if gamesJsonFile.read(1):            
             gamesJsonFile.seek(0)
             eventsJson = json.load(gamesJsonFile)
+            logger.debug("READ FROM CACHE")
         else:            
             eventsResponse = requests.get(url="https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard")
             eventsJson = eventsResponse.json()
             json.dump(eventsJson, gamesJsonFile, ensure_ascii=False, indent=4)
+            logger.debug("READ FROM GAMES JSON API")
     gamesJsonFile.close()    
     # Decalare an empty list to hold the games dicts.
     games = []
@@ -426,6 +434,7 @@ def runClock(duration):
     #run for duration in seconds
     clockstart=datetime.now()
     clockend=clockstart + timedelta(seconds=duration)
+    logger.debug("CLOCK START: " + clockstart.strftime("%H:%M:%S") + " END: " + clockend.strftime("%H:%M:%S"))
     moveTimer=0
     x=firstMiddleCol+12
     y=centerHeight
@@ -640,16 +649,13 @@ if __name__ == "__main__":
     cacheData.lastCacheTime=datetime.now()
     cacheData.gameCacheDelay=0
 
-    
-
-    logging.basicConfig(filename=config.get('scoreboard','log'),
-                    filemode='a',
-                    format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
-                    datefmt='%H:%M:%S',
-                    level=logging.INFO)
-
-    logging.info("Running Scoreboard")
-    logger = logging.getLogger('scoreboard')    
+    logger = logging.getLogger('scoreboard')
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+    logger.info("Running Scoreboard")
 
     # Run the scoreboard.
     runScoreboard()
