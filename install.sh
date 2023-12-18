@@ -43,8 +43,7 @@ mkdir /usr/local/scoreboard
 mkdir /usr/local/scoreboard/cache
 touch /usr/local/scoreboard/cache/teams.json
 touch /usr/local/scoreboard/cache/games.json
-touch /usr/local/scoreboard/rgb_scoreboard.log
-chmod -R 777 /usr/local/scoreboard/
+chmod -R 777 /usr/local/scoreboard/cache
 cp -R assets /usr/local/scoreboard/
 cp -R submodules /usr/local/scoreboard/
 
