@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 from PIL import Image, ImageDraw, ImageFont, ImageSequence
-from rgbmatrix import RGBMatrix, RGBMatrixOptions
+from RGBMatrixEmulator import RGBMatrix, RGBMatrixOptions
 from datetime import datetime, timezone, timedelta
+from os.path import exists
 import configparser
 import logging
 import requests
@@ -18,6 +19,16 @@ class cacheInfo:
     def endTime(self):
         return self.lastCacheTime + timedelta(seconds=self.gameCacheDelay)
         
+class nhlInfo:
+    def __init__(self):
+        self.enabled=False
+        self.favoriteTeams=''
+
+    def isEnabled(self):
+        return self.enabled
+    
+    def isFavoriteTeam(self,team):
+        return self.favoriteTeams.__contains__(team)
 
 def get_frames(path,size):
     """Returns an iterable of gif frames."""
@@ -163,7 +174,7 @@ def getGameData(teams,cacheData):
             cacheData.gameCacheDelay=timeUntil(earliestGame,True).seconds
         elif allGamesEnded and cacheData.gameCacheDelay<=0:
             cacheData.gameCacheDelay=timeUntil(datetime.now() + timedelta(hours = 1)).seconds
-        else:
+        elif cacheData.gameCacheDelay<=5:
             cacheData.gameCacheDelay=5
     
     return games
@@ -223,18 +234,31 @@ def utcToLocal(utc_dt):
     return utc_dt.replace(tzinfo=timezone.utc).astimezone(tz=None)
 
 def isCurrentTimeBetween(startTime, endTime):
-    now = datetime.now()    
-    if startTime < endTime:
-        return startTime <= now <= endTime
+    now = datetime.now()
+    sTime=startTime.replace(month=now.month,day=now.day,year=now.year) #our default on/off times have no date, so set them based on the current time
+    eTime=endTime.replace(month=now.month,day=now.day,year=now.year)
+    if sTime.year==1900:
+        sTime=sTime.replace(month=now.month,day=now.day,year=now.year)
+    if eTime.year==1900:
+        eTime=eTime.replace(month=now.month,day=now.day,year=now.year)
+        if eTime<now:
+            eTime=eTime+timedelta(days=1)    
+    
+    if sTime < eTime:
+        return sTime <= now <= eTime
     else:
-        return now >= startTime or now <= endTime
+        return now >= sTime or now <= eTime
 
 def timeUntil(startTime,utc=False):
     now = datetime.now()
     if utc: now = utcToLocal(datetime.now(timezone.utc))
-    if now>startTime: 
-        return startTime-startTime
-    return startTime - now
+    sTime=startTime
+    if sTime.year==1900:
+        sTime=sTime.replace(month=now.month,day=now.day,year=now.year)
+
+    if now>sTime: 
+        return sTime-sTime
+    return sTime - now
 
 def checkGoalScorer(game, gameOld):
     """Checks if a team has scored.
@@ -278,7 +302,7 @@ def buildGame(game, gameOld, scoringTeam):
     # Add the period to the image.
     displayPeriod(game['Period Number'], game['Period Name'], game['Period Time Remaining'], game['Status'], startTime)
     # Add the current score to the image. Note if either team scored.
-    return displayScore(game['Status'],game['Away Score'], game['Home Score'], scoringTeam)
+    return displayScore(game,scoringTeam)
 
 def buildNoGamesToday():
     """Adds all aspects of the no games today screen to the image object."""
@@ -375,14 +399,19 @@ def displayPeriod(periodNumber, periodName, timeRemaining, status, startTime):
 
     draw.text((firstMiddleCol+12,7), periodName, font=fontDefault, fill=fillWhite, anchor="ms")
 
-def displayScore(status, awayScore, homeScore, scoringTeam = "none"):
+def displayScore(game,scoringTeam = "none"):
     """Add the score for both teams to the image object.
     Args:
         awayScore (int): Score of the away team.
         homeScore (int): Score of the home team.
         scoringTeam (str, optional): The team that scored if applicable. Options: "away", "home", "both", "none". Defaults to "none".
     """    
-    goalData = {'score':'','location':'','secondScore':'','secondLocation':(0,0),'both':False}
+    status=game['Status']
+    awayTeam=game['Away Abbreviation']
+    awayScore=game['Away Score']
+    homeScore=game['Home Score']
+    homeTeam=game['Home Abbreviation']
+    goalData = {'score':'','location':'','team':'','isHome':False,'secondScore':'','secondLocation':(0,0),'secondTeam':'','both':False}
     if status=="STATUS_SCHEDULED":
         draw.text((firstMiddleCol+5,17), "AT", font=fontLarge, fill=fillWhite)
         return goalData
@@ -399,25 +428,28 @@ def displayScore(status, awayScore, homeScore, scoringTeam = "none"):
         draw.text((firstMiddleCol+17,18), str(homeScore), font=fontLarge, fill=fillWhite)
         goalData['score']=str(awayScore)
         goalData['location']=(firstMiddleCol-1,18)
+        goalData['team']=awayTeam
     elif scoringTeam == "home":
         draw.text((firstMiddleCol-1,18), str(awayScore), font=fontLarge, fill=fillWhite)
         draw.text((firstMiddleCol+17,18), str(homeScore), font=fontLarge, fill=fillRed)
         goalData['score']=str(homeScore)
         goalData['location']=(firstMiddleCol+17,18)
+        goalData['team']=homeTeam
+        goalData['isHome']=True
     elif scoringTeam == "both":
         draw.text((firstMiddleCol-1,18), str(awayScore), font=fontLarge, fill=fillRed)
         draw.text((firstMiddleCol+17,18), str(homeScore), font=fontLarge, fill=fillRed)
-        goalData = {'score':str(awayScore), 'location':(firstMiddleCol-1,18), 'secondScore':str(homeScore), 'secondLocation':(firstMiddleCol+17,18), 'both':True}
+        goalData = {'score':str(awayScore), 'location':(firstMiddleCol-1,18), 'team':awayTeam, 'secondScore':str(homeScore), 'secondLocation':(firstMiddleCol+17,18), 'secondTeam':homeTeam, 'both':True}
 
     return goalData
 
 def displayGoal(goalData):
     if goalData['score']=='':
         return
-    # Show lamp and goal info
-    display_gif(sbPath + "assets/images/hockey-goal.gif",1,(0,0),(fullWidth,options.rows))
     # If both teams have scored.
-    if goalData['both'] == True:        
+    if goalData['both'] == True:
+        #diplay animation
+        showGoalAnimation(goalData['secondTeam'])
         # Fade both numbers to white.
         for n in range(50, 256):
             draw.text(goalData['location'], goalData['score'], font=fontLarge, fill=(255, n, n, 255))
@@ -426,11 +458,18 @@ def displayGoal(goalData):
             time.sleep(.0015)    
     # If one team has scored.
     else:
+        showGoalAnimation(goalData['team'])
         # Fade number to white.
         for n in range(50, 256):
             draw.text(goalData['location'], goalData['score'], font=fontLarge, fill=(255, n, n, 255))
             matrix.SetImage(image)
             time.sleep(.0015)
+
+def showGoalAnimation(team):
+    if nhl.isFavoriteTeam(team) and exists(sbPath + "assets/images/goal/"+ team +".gif"):
+        display_gif(sbPath + "assets/images/goal/"+ team +".gif",1,(0,0),(fullWidth,options.rows))
+    elif exists(sbPath + "assets/images/goal/DEFAULT.gif"):
+        display_gif(sbPath + "assets/images/goal/DEFAULT.gif",1,(0,0),(fullWidth,options.rows))
 
 def runClock(duration):
     #run for duration in seconds
@@ -590,12 +629,15 @@ def runScoreboard():
                     runClock(waitTime.seconds-60)
                 else:
                     time.sleep(waitTime.seconds-60) #sleep until one min prior to start time and check again
+            if waitTime.seconds<60 and waitTime.seconds>1:
+                logger.info("Waking up in " + str(waitTime.seconds) + " seconds.")
+                display_gif(sbPath + "assets/images/idle.gif",1,(firstMiddleCol,0),(25,32),200)
 
 if __name__ == "__main__":
     # Read in configs from INI
     config = configparser.ConfigParser()
-    #config.read('setup/scoreboard.conf')
-    config.read('/etc/rgb_scoreboard.conf')
+    config.read('setup/scoreboard.conf')
+    #config.read('/etc/rgb_scoreboard.conf')
     
     # Configure options for the matrix
     options = RGBMatrixOptions()
@@ -627,8 +669,6 @@ if __name__ == "__main__":
     fillBlack = 0,0,0,255
     fillRed = 255,50,50,255
 
-    # Define the first col that can be used for center text.
-    # i.e. the first col you can use without worry of logo overlap.
     fullWidth = options.cols*options.chain_length
     centerWidth = fullWidth/2
     centerHeight = options.rows-round(options.rows/2)    
@@ -636,13 +676,9 @@ if __name__ == "__main__":
     endPixel = fullWidth-1
     endHeight = options.rows-1
 
-    # Define the number of seconds to sit on each game.
     confCycleTime = config.getint('scoreboard', 'confCycleTime')
-
-    now=datetime.now()
-    timeStart=datetime.strptime(config.get('scoreboard', 'timeStart'), "%H:%M%p").replace(month=now.month,day=now.day,year=now.year)
-    timeEnd=datetime.strptime(config.get('scoreboard', 'timeEnd'), "%H:%M%p").replace(month=now.month,day=now.day,year=now.year)
-    if timeEnd<now: timeEnd=timeEnd+timedelta(days=1)
+    timeStart=datetime.strptime(config.get('scoreboard', 'timeStart'), "%H:%M%p")
+    timeEnd=datetime.strptime(config.get('scoreboard', 'timeEnd'), "%H:%M%p")    
     disableFade=config.getboolean('scoreboard', 'disableFade')
     debug=config.getboolean('scoreboard', 'debug')
     showClockWhileSleeping=config.getboolean('scoreboard', 'showClockWhileSleeping')
@@ -651,7 +687,11 @@ if __name__ == "__main__":
     cacheData.lastCacheTime=datetime.now()
     cacheData.gameCacheDelay=0
 
-    
+    # NHL CONFIG
+    nhl = nhlInfo()
+    nhl.enabled = config.getboolean('NHL', 'enabled')
+    nhl.favoriteTeams = config.get('NHL', 'favoriteTeams')
+    # END NHL CONFIG
 
     logging.basicConfig(filename=config.get('scoreboard','log'),
                     filemode='w+',
@@ -669,5 +709,5 @@ if __name__ == "__main__":
 
     # Run the scoreboard.
     runScoreboard()
-
+    
     #penalty animation - need to check for pen: #display_gif("assets/images/penalty_animation.gif",2,True)
