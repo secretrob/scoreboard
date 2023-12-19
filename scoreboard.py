@@ -235,8 +235,8 @@ def utcToLocal(utc_dt):
 
 def isCurrentTimeBetween(startTime, endTime):
     now = datetime.now()
-    sTime=startTime.replace(month=now.month,day=now.day,year=now.year) #our default on/off times have no date, so set them based on the current time
-    eTime=endTime.replace(month=now.month,day=now.day,year=now.year)
+    sTime=startTime
+    eTime=endTime
     if sTime.year==1900:
         sTime=sTime.replace(month=now.month,day=now.day,year=now.year)
     if eTime.year==1900:
