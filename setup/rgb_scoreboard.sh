@@ -22,7 +22,8 @@ case "$1" in
     ;;
   restart)
     echo "Retarting scoreboard py"
-    pkill -f /usr/local/bin/scoreboard.py && /usr/local/bin/scoreboard.py > /dev/null 2>&1 &
+    pkill -f /usr/local/bin/scoreboard.py
+    /usr/local/bin/scoreboard.py > /dev/null 2>&1 &
     ;;
   *)
     echo "Usage: /etc/init.d/runScoreboard.sh {start|stop}"
