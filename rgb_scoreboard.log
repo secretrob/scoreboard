@@ -1,7 +1,0 @@
-16:58:31,348 scoreboard INFO Running Scoreboard
-16:58:31,376 RGBME INFO RGBME v0.10.0 - 64x32 Matrix | 2x1 Chain | 16px per LED (SQUARE) | BrowserAdapter
-16:58:31,378 RGBME INFO Starting server...
-16:58:31,382 RGBME INFO Server started and ready to accept requests on http://localhost:8888/
-16:58:31,439 scoreboard INFO GAME JSON - DELAY: 0 LASTCACHE: 16:58:31 START: 16:58:31 END: 16:58:31
-16:58:31,440 scoreboard INFO FLUSH AND PULL API
-16:58:31,726 scoreboard INFO READ FROM GAMES JSON API

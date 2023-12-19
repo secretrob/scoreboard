@@ -232,6 +232,8 @@ def isCurrentTimeBetween(startTime, endTime):
 def timeUntil(startTime,utc=False):
     now = datetime.now()
     if utc: now = utcToLocal(datetime.now(timezone.utc))
+    if now>startTime: 
+        return startTime-startTime
     return startTime - now
 
 def checkGoalScorer(game, gameOld):
