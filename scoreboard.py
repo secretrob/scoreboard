@@ -119,6 +119,7 @@ def getGameData(teams,cacheData):
     if eventsJson['events']: # If games today.
         allGamesEnded = True
         earliestGame = utcToLocal(datetime(2037,1,1,0,0,0,0,timezone.utc))
+        earliestDay = 32
         for event in eventsJson['events']:
             # Prep the period data for consistancy. This data doesn't exist in the API responce until game begins.
             if event['status']['period']>0:
@@ -137,6 +138,7 @@ def getGameData(teams,cacheData):
             gameDict = {
                 'Game ID': event['id'],
                 #trash hack using 0/1 for now
+                'Date': datetime.strptime(event['date'], '%Y-%m-%dT%H:%MZ'),
                 'Home Team': event['competitions'][0]['competitors'][0]['team']['displayName'],                
                 'Home Abbreviation': event['competitions'][0]['competitors'][0]['team']['abbreviation'],
                 'Away Team': event['competitions'][0]['competitors'][1]['team']['displayName'],                 
@@ -160,6 +162,7 @@ def getGameData(teams,cacheData):
             if gameDict['Status']=="STATUS_SCHEDULED":
                 allGamesEnded = False
                 earliestGame = gameDict['Start Time Local'] if gameDict['Start Time Local'] < earliestGame else earliestGame
+                earliestDay = gameDict['Date'].day if gameDict['Date'].day < earliestDay else earliestDay
             elif gameDict['Status']!="STATUS_FINAL":
                 allGamesEnded = False
                 earliestGame = utcToLocal(datetime(2037,1,1,0,0,0,0,timezone.utc))
@@ -170,10 +173,14 @@ def getGameData(teams,cacheData):
             # Sort list by Game ID. Ensures order doesn't change as games end.
             games.sort(key=lambda x:x['Game ID'])
         
-        if earliestGame!=datetime(2037,1,1,0,0,0,0,timezone.utc) and cacheData.gameCacheDelay<=0:
+        now = datetime.now()        
+        if earliestDay!=now.day:
+            endOfDay = datetime(now.year,now.month,now.day,23,59,59,0,utcToLocal(now).tzinfo)
+            cacheData.gameCacheDelay=timeUntil(endOfDay,True).seconds
+        elif earliestGame!=datetime(2037,1,1,0,0,0,0,timezone.utc) and cacheData.gameCacheDelay<=0:
             cacheData.gameCacheDelay=timeUntil(earliestGame,True).seconds
         elif allGamesEnded and cacheData.gameCacheDelay<=0:
-            cacheData.gameCacheDelay=timeUntil(datetime.now() + timedelta(hours = 1)).seconds
+            cacheData.gameCacheDelay=timeUntil(now + timedelta(hours = 1)).seconds
         elif cacheData.gameCacheDelay<=5:
             cacheData.gameCacheDelay=5
     
@@ -260,6 +267,14 @@ def timeUntil(startTime,utc=False):
         return sTime-sTime
     return sTime - now
 
+def sameDay(startTime,utc=False):
+    now = datetime.now()
+    if utc: now = utcToLocal(datetime.now(timezone.utc))
+    sTime=startTime
+    if sTime.year==1900:
+        return True
+    return sTime.month==now.month and sTime.day==now.day        
+
 def checkGoalScorer(game, gameOld):
     """Checks if a team has scored.
 
@@ -291,32 +306,11 @@ def buildGame(game, gameOld, scoringTeam):
     """
 
     # Add the logos of the teams inivolved to the image.
-    displayLogos(game['Away Abbreviation'],game['Home Abbreviation'])
-
-    startTime = game['Start Time Local']
-    startTime = startTime.time().strftime('%I:%M %p')
-    startTime = str(startTime) # Cast to a string for easier parsing.
-    if startTime[0]=="0": #strip leading 0
-        startTime=startTime[1:]
-    
+    displayLogos(game['Away Abbreviation'],game['Home Abbreviation'])    
     # Add the period to the image.
-    displayPeriod(game['Period Number'], game['Period Name'], game['Period Time Remaining'], game['Status'], startTime)
+    displayPeriod(game)
     # Add the current score to the image. Note if either team scored.
     return displayScore(game,scoringTeam)
-
-def buildNoGamesToday():
-    """Adds all aspects of the no games today screen to the image object."""
-
-    # Add the NHL logo to the image.
-    nhlLogo = Image.open(sbPath + "assets/images/NHL_Logo_Simplified.png")
-    nhlLogo = cropImage(nhlLogo)
-    nhlLogo.thumbnail((40,30))
-    image.paste(nhlLogo, (1, 1))
-
-    # Add "No Games Today" to the image.
-    draw.text((32,0), "No", font=fontDefault, fill=fillWhite)
-    draw.text((32,10), "Games", font=fontDefault, fill=fillWhite)
-    draw.text((32,20), "Today", font=fontDefault, fill=fillWhite)
 
 def buildLoading():
     """Adds all aspects of the loading screen to the image object."""
@@ -383,17 +377,23 @@ def displayLogos(awayTeam, homeTeam):
     if debug:
         draw.line([(63,0),(63,options.rows)],fill=fillRed,width=2)
 
-def displayPeriod(periodNumber, periodName, timeRemaining, status, startTime):
-    """Adds the current period to the image object.
+def displayPeriod(game):
+    date = game['Date']
+    status = game['Status']
+    periodName = game['Period Name']
+    timeRemaining = game['Period Time Remaining']
 
-    Args:
-        periodNumber (int): [description]
-        periodName (string): [description]
-        timeRemaining (string): [description]
-    """    
+    gameDay = "Today" if sameDay(date,True) else str(date.month) + "/" + str(date.day)
+
+    startTime = game['Start Time Local']
+    startTime = startTime.time().strftime('%I:%M %p')
+    startTime = str(startTime) # Cast to a string for easier parsing.
+    if startTime[0]=="0": #strip leading 0
+        startTime=startTime[1:]
+
     if status=="STATUS_SCHEDULED":
         timeRemaining=startTime
-        periodName="Today"
+        periodName=gameDay
     if status!="STATUS_FINAL":
         draw.text((firstMiddleCol+12,13), timeRemaining, font=fontDefault, fill=fillWhite, anchor="ms")        
 
@@ -587,14 +587,6 @@ def runScoreboard():
                     # Make the screen totally blank between fades.
                     draw.rectangle(((0,0),(endPixel,endHeight)), fill=fillBlack) 
                     matrix.SetImage(image)
-
-            # If there's no games, build the no games today sceen, then wait 10 minutes before checking again.
-            else:
-                buildNoGamesToday()
-                matrix.brightness = maxBrightness
-                matrix.SetImage(image)
-                time.sleep(600)
-                draw.rectangle(((0,0),(endPixel,endHeight)), fill=fillBlack)
             
             # Refresh the game data.
             # Record the data of the last cycle in gamesOld to check for goals.
