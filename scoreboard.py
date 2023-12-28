@@ -138,7 +138,7 @@ def getGameData(teams,cacheData):
             gameDict = {
                 'Game ID': event['id'],
                 #trash hack using 0/1 for now
-                'Date': datetime.strptime(event['date'], '%Y-%m-%dT%H:%MZ'),
+                'Date': utcToLocal(datetime.strptime(event['date'], '%Y-%m-%dT%H:%MZ')),
                 'Home Team': event['competitions'][0]['competitors'][0]['team']['displayName'],                
                 'Home Abbreviation': event['competitions'][0]['competitors'][0]['team']['abbreviation'],
                 'Away Team': event['competitions'][0]['competitors'][1]['team']['displayName'],                 
