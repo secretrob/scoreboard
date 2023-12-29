@@ -605,6 +605,7 @@ def runScoreboard():
             matrix.SetImage(image)
             waitTime = timeUntil(timeStart)
             dispTime = str(waitTime + timedelta(days=-1*waitTime.days)).split(':')
+            cacheData.gameCacheDelay=0 #Reset cache time so when we wake we can look it up.
             if waitTime.seconds>300:
                 logger.info("Sleeping due to screen off times. Will wake and try API again in " + dispTime[0] + " hours and " + dispTime[1] + " mins.")
                 draw.rectangle(((0,0),(endPixel,endHeight)), fill=fillBlack) #blank screen        
