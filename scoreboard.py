@@ -166,7 +166,8 @@ def getGameData(teams,cacheData):
             elif gameDict['Status']!="STATUS_FINAL":
                 allGamesEnded = False
                 earliestDay = datetime.now().day
-                earliestGame = utcToLocal(datetime(2037,1,1,0,0,0,0,timezone.utc))
+                earliestGame = datetime.now()
+                cacheData.gameCacheDelay=5
 
             # Append the dict to the games list.
             games.append(gameDict)
