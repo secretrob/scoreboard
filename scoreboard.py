@@ -632,7 +632,7 @@ if __name__ == "__main__":
     # Read in configs from INI
     config = configparser.ConfigParser()
     #config.read('setup/scoreboard.conf')
-    config.read('/etc/rgb_scoreboard.conf')
+    config.read('rgb_scoreboard.conf')
     
     # Configure options for the matrix
     options = RGBMatrixOptions()
